@@ -6,7 +6,27 @@
 
 Low-Impact Soldier Augmentation Project
 
-## Project Organization
+## Installation
+Clone the repository:
+```
+git clone https://github.com/UniExeterRSE/LISA.git
+```
+
+This project uses [Micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html) for package management. 
+
+On MacOS, you can install this via:
+```
+brew install micromamba
+```
+
+The environment can then be created and activated:
+```
+micromamba create -f env.yml
+micromamba activate LISA
+```
+
+
+## Project Organisation
 
 ```
 ├── LICENSE            <- Open-source license if one is chosen
