@@ -1,10 +1,10 @@
-# LISA
+# Low-Impact Soldier Augmentation Project
 
 <a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
     <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
 </a>
 
-Low-Impact Soldier Augmentation Project
+![Screen Recording 2024-07-18 at 14 40 42](https://github.com/user-attachments/assets/d33aebfd-4729-41cd-a2ac-e07b48cce7cc)
 
 ## Installation
 Clone the repository:
