@@ -3,6 +3,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from loguru import logger
 
+from lisa.private_paths import ONEDRIVE_DIR
+
 # Load environment variables from .env file if it exists
 load_dotenv()
 
@@ -15,6 +17,7 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 INTERIM_DATA_DIR = DATA_DIR / "interim"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 EXTERNAL_DATA_DIR = DATA_DIR / "external"
+PILOT_DATA_DIR = RAW_DATA_DIR / ONEDRIVE_DIR / "LISA 1 Pilot Data/Pilot 1/120724"
 
 MODELS_DIR = PROJ_ROOT / "models"
 
