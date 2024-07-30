@@ -12,7 +12,20 @@ from lisa.config import INTERIM_DATA_DIR, PILOT_DATA_DIR
 app = typer.Typer()
 
 
-def _find_column_names(c):
+def _find_column_names(c: c3d) -> list[str]:
+    """
+    Find column names in the given c3d object.
+    Give numeric labels to any repeated columns (i.e. different IMU devices).
+
+    Args:
+        c (c3d): The c3d object containing the data.
+
+    Returns:
+        list[str]: A list of modified column names.
+
+    """
+    # TODO Currently we cannot map between the same device positions in different files.
+    # Raw data will have to be updated.
     columns = c["parameters"]["ANALOG"]["LABELS"]["value"]
 
     # Count total occurrences of each item
@@ -43,7 +56,16 @@ def _find_column_names(c):
     return modified_columns
 
 
-def _find_activity_category(filename, activity_categories):
+def _find_activity_category(filename: str, activity_categories: list[str]) -> str | None:
+    """
+    Find the activity category in the filename.
+
+    Args:
+        filename (str): The filename to search for the activity category.
+        activity_categories (list[str]): A list of activity categories to search for.
+    Returns:
+        str | None: The activity category if found, otherwise None.
+    """
     for activity in activity_categories:
         if activity in filename.lower():
             return activity
@@ -55,6 +77,15 @@ def main(
     input_path: Path = PILOT_DATA_DIR,
     output_path: Path = INTERIM_DATA_DIR / "pilot_data.csv",
 ):
+    """
+    Process pilot data and save to CSV.
+    Removes unwanted columns, add an 'ACTIVITY' column based on the filename
+    and combines all c3d files into one dataset.
+
+    Args:
+        input_path (Path): Path to the directory containing the pilot data.
+        output_path (Path): Path to save the processed data to.
+    """
     activity_categories = ["walk", "jog", "run", "jump"]
     total_df = None
 
