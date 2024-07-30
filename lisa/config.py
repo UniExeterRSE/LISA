@@ -3,7 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from loguru import logger
 
-from lisa.secrets import ONEDRIVE_DIR
+from lisa.private_paths import ONEDRIVE_DIR
 
 # Load environment variables from .env file if it exists
 load_dotenv()
