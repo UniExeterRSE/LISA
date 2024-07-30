@@ -1,12 +1,14 @@
+import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+import dotenv
 from loguru import logger
 
-from lisa.private_paths import ONEDRIVE_DIR
+project_dir = os.path.join(os.path.dirname(__file__), os.pardir)
+dotenv_path = os.path.join(project_dir, ".env")
+dotenv.load_dotenv(dotenv_path)
 
-# Load environment variables from .env file if it exists
-load_dotenv()
+ONEDRIVE_DIR = os.environ.get("ONEDRIVE_DIR", "OneDrive")
 
 # Paths
 PROJ_ROOT = Path(__file__).resolve().parents[1]

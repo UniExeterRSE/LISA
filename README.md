@@ -24,7 +24,10 @@ The environment can then be created and activated:
 micromamba create -f env.yml
 micromamba activate LISA
 ```
+## Data
+_Under Construction_
 
+To access the data, you will need to set `ONEDRIVE_DIR` in a `.env` file at the root level.
 
 ## Project Organisation
 
