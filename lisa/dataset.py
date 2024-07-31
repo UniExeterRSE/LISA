@@ -30,7 +30,11 @@ def _add_time_column(c: c3d, df: pl.DataFrame) -> pl.DataFrame:
 
     time_data = np.arange(num_frames) / frame_rate
 
-    return df.with_columns(TIME=time_data)
+    # Convert time_data to milliseconds and cast to integers
+    time_data_ms = (time_data * 1000).astype(int)
+    time_series = pl.Series("TIME", time_data_ms)
+
+    return df.with_columns(time_series)
 
 
 def _find_column_names(c: c3d) -> list[str]:
@@ -158,7 +162,7 @@ def main(
         logger.success(f"Output saved to: {output_path}")
     else:
         logger.success("Process complete, data not saved.")
-        print(total_df.describe())
+        print(total_df.describe(), total_df.head())
 
 
 if __name__ == "__main__":
