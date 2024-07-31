@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 import typer
 from ezc3d import c3d
@@ -10,6 +11,26 @@ from tqdm import tqdm
 from lisa.config import INTERIM_DATA_DIR, PILOT_DATA_DIR
 
 app = typer.Typer()
+
+
+def _add_time_column(c: c3d, df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Add a time column to the given DataFrame.
+
+    Args:
+        c (c3d): The c3d object containing the data.
+        df (pl.DataFrame): The DataFrame to add the time column to.
+
+    Returns:
+        pl.DataFrame: The DataFrame with the time column added.
+    """
+    frame_rate = c["parameters"]["ANALOG"]["RATE"]["value"][0]
+
+    num_frames = c["data"]["analogs"].shape[2]
+
+    time_data = np.arange(num_frames) / frame_rate
+
+    return df.with_columns(TIME=time_data)
 
 
 def _find_column_names(c: c3d) -> list[str]:
@@ -76,6 +97,7 @@ def _find_activity_category(filename: str, activity_categories: list[str]) -> st
 def main(
     input_path: Path = PILOT_DATA_DIR,
     output_path: Path = INTERIM_DATA_DIR / "pilot_data.csv",
+    save: bool = False,
 ):
     """
     Process pilot data and save to CSV.
@@ -85,6 +107,7 @@ def main(
     Args:
         input_path (Path): Path to the directory containing the pilot data.
         output_path (Path): Path to save the processed data to.
+        save (bool): Whether to save the processed data to a CSV file.
     """
     activity_categories = ["walk", "jog", "run", "jump"]
     total_df = None
@@ -119,13 +142,18 @@ def main(
                 pl.lit(_find_activity_category(filename, activity_categories)).alias("ACTIVITY")
             )
 
+            df = _add_time_column(c3d_contents, df)
+
             if total_df is None:
                 total_df = df
             else:
                 total_df = total_df.vstack(df)
 
-    total_df.write_csv(output_path)
-    logger.success(f"Output saved to: {output_path}")
+    if save:
+        total_df.write_csv(output_path)
+        logger.success(f"Output saved to: {output_path}")
+    else:
+        logger.success("Process complete, data not saved.")
 
 
 if __name__ == "__main__":
