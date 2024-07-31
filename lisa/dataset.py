@@ -97,7 +97,7 @@ def _find_activity_category(filename: str, activity_categories: list[str]) -> st
 def main(
     input_path: Path = PILOT_DATA_DIR,
     output_path: Path = INTERIM_DATA_DIR / "pilot_data.csv",
-    save: bool = False,
+    save: bool = typer.Option(False, help="Flag to save the processed data to CSV"),
 ):
     """
     Process pilot data and save to CSV.
@@ -111,6 +111,7 @@ def main(
     """
     activity_categories = ["walk", "jog", "run", "jump"]
     total_df = None
+    trial_count = 0
 
     for filename in tqdm(os.listdir(input_path)):
 
@@ -144,6 +145,9 @@ def main(
 
             df = _add_time_column(c3d_contents, df)
 
+            df = df.with_columns(pl.lit(trial_count).cast(pl.Int16).alias("TRIAL"))
+            trial_count += 1
+
             if total_df is None:
                 total_df = df
             else:
@@ -154,6 +158,7 @@ def main(
         logger.success(f"Output saved to: {output_path}")
     else:
         logger.success("Process complete, data not saved.")
+        print(total_df.describe())
 
 
 if __name__ == "__main__":
