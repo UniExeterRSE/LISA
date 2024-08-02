@@ -95,4 +95,4 @@ def test_sliding_window_time_reset_error() -> None:
     )
 
     with pytest.raises(ValueError):
-        result = sliding_window(df, period=3)
+        sliding_window(df, period=3)

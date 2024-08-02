@@ -52,12 +52,10 @@ def sliding_window(df, period=300, log=False):
     result = rolling.agg(aggregations)
 
     # Check if TIME resets to 0 when TRIAL increases by 1
-    trial_check = result.with_columns(
-        (pl.col("TRIAL") - pl.col("TRIAL").shift(1)).alias("TRIAL_INCREASE")
+    trial_check = result.with_columns((pl.col("TRIAL") - pl.col("TRIAL").shift(1)).alias("TRIAL_INCREASE"))
+    time_resets_correctly = trial_check.filter(pl.col("TRIAL_INCREASE") == 1)["TIME"].to_list() == [0] * len(
+        trial_check.filter(pl.col("TRIAL_INCREASE") == 1)
     )
-    time_resets_correctly = trial_check.filter(pl.col("TRIAL_INCREASE") == 1)[
-        "TIME"
-    ].to_list() == [0] * len(trial_check.filter(pl.col("TRIAL_INCREASE") == 1))
 
     # Remove rows before first 'full' window
     if time_resets_correctly:
@@ -69,7 +67,7 @@ def sliding_window(df, period=300, log=False):
 
     # Add the ACTIVITY column back in by matching TRIAL
     # Assumes every trial has one activity type
-    activity_map = dict(zip(df["TRIAL"], df["ACTIVITY"]))
+    activity_map = dict(zip(df["TRIAL"], df["ACTIVITY"], strict=True))
     result = result.with_columns(ACTIVITY=pl.col("TRIAL").replace_strict(activity_map))
 
     return result
