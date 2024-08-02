@@ -24,6 +24,11 @@ The environment can then be created and activated:
 micromamba create -f env.yml
 micromamba activate LISA
 ```
+## Tests
+To run the tests:
+```
+pytest
+```
 ## Data
 _Under Construction_
 
@@ -60,7 +65,10 @@ To access the data, you will need to set `ONEDRIVE_DIR` in a `.env` file at the 
 ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
 │                         generated with `pip freeze > requirements.txt`
 │
-├── setup.cfg          <- Configuration file for flake8
+├── tests              <- Test files for core functionality.
+│   │
+│   └── unit           <- Tests for individual functions
+│       └── test_features.py
 │
 └── lisa                <- Source code for use in this project.
     │

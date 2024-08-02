@@ -118,11 +118,8 @@ def main(
     trial_count = 0
 
     for filename in tqdm(os.listdir(input_path)):
-
         # Ignore any non-c3d files or files that don't start with the activity categories, i.e. calibration files
-        if filename.endswith(".c3d") and any(
-            activity in filename.lower() for activity in activity_categories
-        ):
+        if filename.endswith(".c3d") and any(activity in filename.lower() for activity in activity_categories):
             logger.info(f"Processing file: {filename}")
             file = os.path.join(PILOT_DATA_DIR, filename)
 
@@ -143,19 +140,14 @@ def main(
 
             df = df.drop(columns_to_remove)
 
-            df = df.with_columns(
-                pl.lit(_find_activity_category(filename, activity_categories)).alias("ACTIVITY")
-            )
+            df = df.with_columns(pl.lit(_find_activity_category(filename, activity_categories)).alias("ACTIVITY"))
 
             df = _add_time_column(c3d_contents, df)
 
             df = df.with_columns(pl.lit(trial_count).cast(pl.Int16).alias("TRIAL"))
             trial_count += 1
 
-            if total_df is None:
-                total_df = df
-            else:
-                total_df = total_df.vstack(df)
+            total_df = df if total_df is None else total_df.vstack(df)
 
     if save:
         total_df.write_csv(output_path)
