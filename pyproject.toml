@@ -17,15 +17,24 @@ classifiers = [
 ]
 requires-python = "~=3.10"
 
-[tool.black]
-line-length = 99
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-  | \.venv
-)/
-'''
-
 [tool.ruff]
 extend-include = ["*.ipynb"]
+line-length = 120
+
+[tool.ruff.lint]
+ignore = [
+  "F821", # Undefined name
+  "B006", # Do not use mutable data structures for argument defaults
+]
+select = [
+  "E",   # pycodestyle
+  "F",   # Pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "SIM", # flake8-simplify
+]
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
