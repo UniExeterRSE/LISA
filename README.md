@@ -68,7 +68,8 @@ To access the data, you will need to set `ONEDRIVE_DIR` in a `.env` file at the 
 ├── tests              <- Test files for core functionality.
 │   │
 │   └── unit           <- Tests for individual functions
-│       └── test_features.py
+│       ├── test_features.py
+│       └── test_dataset.py
 │
 └── lisa                <- Source code for use in this project.
     │
