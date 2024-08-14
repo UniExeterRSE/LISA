@@ -9,7 +9,7 @@ from lisa.config import INTERIM_DATA_DIR, PROCESSED_DATA_DIR
 app = typer.Typer()
 
 
-def sliding_window(df, period=300, log=False):
+def sliding_window(df: pl.DataFrame, period: int = 300, log: bool = False) -> pl.DataFrame:
     """
     Apply sliding window aggregation on a DataFrame.
     Extracts first, last, max, min, mean and std for each signal.
