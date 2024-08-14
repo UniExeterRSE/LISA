@@ -81,10 +81,10 @@ To access the data, you will need to set `ONEDRIVE_DIR` in a `.env` file at the 
     ├── features       <- Scripts to turn raw data into features for modeling
     │   └── build_features.py
     │
-    ├── models         <- Scripts to train models and then use trained models to make
+    ├── modeling         <- Scripts to train models and then use trained models to make
     │   │                 predictions
-    │   ├── predict_model.py
-    │   └── train_model.py
+    │   ├── predict.py
+    │   └── logistic_regression.py
     │
     └── visualization  <- Scripts to create exploratory and results oriented visualizations
         └── visualize.py
