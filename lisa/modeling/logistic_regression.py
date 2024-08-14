@@ -3,6 +3,9 @@ from pathlib import Path
 import polars as pl
 import typer
 from loguru import logger
+from numpy import ndarray
+from scipy.sparse import spmatrix
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
 from lisa.config import MODELS_DIR, PROCESSED_DATA_DIR
@@ -69,11 +72,28 @@ def train_test_split(df: pl.DataFrame, train_size: float, gap: int = 0) -> list:
     ]
 
 
+def standard_scaler(X_train, X_test) -> tuple[ndarray, (ndarray | spmatrix)]:
+    """
+    Standardizes the input data.
+
+    Args:
+        X_train (pl.DataFrame): The training data to be standardized.
+        X_test (pl.DataFrame): The test data to be standardized.
+
+    Returns:
+        tuple[ndarray, (ndarray | spmatrix)]: The standardized training and test data.
+    """
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    return X_train, X_test
+
+
 @app.command()
 def main(
     # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
     features_path: Path = PROCESSED_DATA_DIR / "features.csv",
-    labels_path: Path = PROCESSED_DATA_DIR / "labels.csv",
     model_path: Path = MODELS_DIR / "model.pkl",
     # -----------------------------------------
 ):
