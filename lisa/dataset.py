@@ -188,7 +188,7 @@ def main(
 
             df = _add_time_column(c3d_contents, df)
 
-            df = _cartesian_to_spherical(df)
+            # df = _cartesian_to_spherical(df)
 
             df = df.with_columns(pl.lit(trial_count).cast(pl.Int16).alias("TRIAL"))
             trial_count += 1
