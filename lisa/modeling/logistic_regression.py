@@ -1,12 +1,15 @@
 from pathlib import Path
+from pickle import dump
 
 import polars as pl
 import typer
 from loguru import logger
 from numpy import ndarray
 from scipy.sparse import spmatrix
+from sklearn import metrics
+from sklearn.linear_model import LogisticRegressionCV
+from sklearn.multiclass import OneVsRestClassifier
 from sklearn.preprocessing import StandardScaler
-from tqdm import tqdm
 
 from lisa.config import MODELS_DIR, PROCESSED_DATA_DIR
 
@@ -16,6 +19,7 @@ app = typer.Typer()
 def train_test_split(df: pl.DataFrame, train_size: float, gap: int = 0) -> list:
     """
     Splits the input dataframe into train and test sets.
+    Each activity is split separately and sequentially in time, and then recombined.
 
     Args:
         df (pl.Dataframe): The input dataframe to be split.
@@ -23,7 +27,7 @@ def train_test_split(df: pl.DataFrame, train_size: float, gap: int = 0) -> list:
         gap (int, optional): The number of rows to leave as a gap between the train and test sets. Defaults to 0.
 
     Returns:
-        list: A list containing train-test split of inputs.
+        list: A list containing train-test split of inputs, i.e. [X_train, X_test, y_train, y_test].
     """
 
     # Ensure train_size is between 0 and 1
@@ -72,16 +76,16 @@ def train_test_split(df: pl.DataFrame, train_size: float, gap: int = 0) -> list:
     ]
 
 
-def standard_scaler(X_train, X_test) -> tuple[ndarray, (ndarray | spmatrix)]:
+def standard_scaler(X_train: pl.DataFrame, X_test: pl.DataFrame) -> tuple[ndarray, (ndarray | spmatrix)]:
     """
     Standardizes the input data.
 
     Args:
-        X_train (pl.DataFrame): The training data to be standardized.
-        X_test (pl.DataFrame): The test data to be standardized.
+        X_train (pl.DataFrame): The training data to be standardised.
+        X_test (pl.DataFrame): The test data to be standardised.
 
     Returns:
-        tuple[ndarray, (ndarray | spmatrix)]: The standardized training and test data.
+        tuple[ndarray, (ndarray | spmatrix)]: The standardised training and test data.
     """
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
@@ -90,20 +94,64 @@ def standard_scaler(X_train, X_test) -> tuple[ndarray, (ndarray | spmatrix)]:
     return X_train, X_test
 
 
+def logistic_regression(X_train: ndarray, y_train: ndarray, log_c: bool = False) -> OneVsRestClassifier:
+    """
+    Fits a logistic regression CV model to the input data.
+
+    Args:
+        X_train (ndarray): The training data.
+        y_train (ndarray): The training labels.
+        log_c (bool, optional): Flag to log the best C hyperparameter for each class. Defaults to False.
+
+    Returns:
+        OneVsRestClassifier: The trained logistic regression model.
+    """
+    logisticRegr = OneVsRestClassifier(LogisticRegressionCV())
+
+    logisticRegr.fit(X_train, y_train)
+
+    if log_c:
+        for i, estimator in enumerate(logisticRegr.estimators_):
+            logger.info(f"Best C for class {i}: {estimator.C_[0]}")
+
+    return logisticRegr
+
+
 @app.command()
 def main(
-    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
-    features_path: Path = PROCESSED_DATA_DIR / "features.csv",
-    model_path: Path = MODELS_DIR / "model.pkl",
-    # -----------------------------------------
+    features_path: Path = PROCESSED_DATA_DIR / "pilot_data.csv",
+    model_path: Path = MODELS_DIR / "logistic_regression_cv.pkl",
+    save: bool = typer.Option(False, help="Flag to save the model"),
 ):
-    # ---- REPLACE THIS WITH YOUR OWN CODE ----
-    logger.info("Training some model...")
-    for i in tqdm(range(10), total=10):
-        if i == 5:
-            logger.info("Something happened for iteration 5.")
-    logger.success("Modeling training complete.")
-    # -----------------------------------------
+    """
+    Train a logistic regression CV classifier model on the processed data.
+    Logs the score and confusion matrix, and optionally saves model to a pickle file.
+
+    Args:
+        features_path (Path): Path to the processed data.
+        model_path (Path): Path to save the trained model.
+        save (bool): Flag to save the model.
+    """
+    df = pl.read_csv(features_path)
+
+    # TODO gap should be set my same variable as sliding window period in features.py
+    X_train, X_test, y_train, y_test = train_test_split(df, train_size=0.8, gap=300)
+
+    X_train, X_test = standard_scaler(X_train, X_test)
+
+    model = logistic_regression(X_train, y_train, log_c=True)
+
+    # save model to pickle file
+    if save:
+        with open(model_path, "wb") as f:
+            dump(model, f, protocol=5)
+        logger.success(f"Model saved to: {model_path}")
+
+    # evaluate model
+    cm = metrics.confusion_matrix(y_test, model.predict(X_test), normalize="true")
+
+    logger.info("Score: " + str(model.score(X_test, y_test)))
+    logger.info("Confusion Matrix:\n" + str(cm))
 
 
 if __name__ == "__main__":
