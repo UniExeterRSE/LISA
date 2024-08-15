@@ -7,7 +7,7 @@ from loguru import logger
 from numpy import ndarray
 from scipy.sparse import spmatrix
 from sklearn import metrics
-from sklearn.linear_model import LogisticRegressionCV
+from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.preprocessing import StandardScaler
 
@@ -94,25 +94,20 @@ def standard_scaler(X_train: pl.DataFrame, X_test: pl.DataFrame) -> tuple[ndarra
     return X_train, X_test
 
 
-def logistic_regression(X_train: ndarray, y_train: ndarray, log_c: bool = False) -> OneVsRestClassifier:
+def logistic_regression(X_train: ndarray, y_train: ndarray) -> OneVsRestClassifier:
     """
-    Fits a logistic regression CV model to the input data.
+    Fits a logistic regression model to the input data.
 
     Args:
         X_train (ndarray): The training data.
         y_train (ndarray): The training labels.
-        log_c (bool, optional): Flag to log the best C hyperparameter for each class. Defaults to False.
 
     Returns:
         OneVsRestClassifier: The trained logistic regression model.
     """
-    logisticRegr = OneVsRestClassifier(LogisticRegressionCV())
+    logisticRegr = OneVsRestClassifier(LogisticRegression())
 
     logisticRegr.fit(X_train, y_train)
-
-    if log_c:
-        for i, estimator in enumerate(logisticRegr.estimators_):
-            logger.info(f"Best C for class {i}: {estimator.C_[0]}")
 
     return logisticRegr
 
@@ -120,11 +115,11 @@ def logistic_regression(X_train: ndarray, y_train: ndarray, log_c: bool = False)
 @app.command()
 def main(
     features_path: Path = PROCESSED_DATA_DIR / "pilot_data.csv",
-    model_path: Path = MODELS_DIR / "logistic_regression_cv.pkl",
+    model_path: Path = MODELS_DIR / "logistic_regression.pkl",
     save: bool = typer.Option(False, help="Flag to save the model"),
 ):
     """
-    Train a logistic regression CV classifier model on the processed data.
+    Train a logistic regression classifier model on the processed data.
     Logs the score and confusion matrix, and optionally saves model to a pickle file.
 
     Args:
@@ -139,7 +134,7 @@ def main(
 
     X_train, X_test = standard_scaler(X_train, X_test)
 
-    model = logistic_regression(X_train, y_train, log_c=True)
+    model = logistic_regression(X_train, y_train)
 
     # save model to pickle file
     if save:
