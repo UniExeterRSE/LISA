@@ -97,6 +97,50 @@ def _find_activity_category(filename: str, activity_categories: list[str]) -> st
     return None  # Return None or a default value if no match is found
 
 
+def _cartesian_to_spherical(df: pl.DataFrame, drop: bool = True) -> pl.DataFrame:
+    """
+    Convert features with cartesian coordinates to spherical coordinates.
+
+    Args:
+        df (pl.DataFrame): The DataFrame containing the cartesian coordinates.
+        drop (bool): Whether to drop the original cartesian columns. Default True.
+
+    Returns:
+        pl.DataFrame: The DataFrame containing the spherical coordinates.
+    """
+    features = set([col.split(".")[0] for col in df.columns if ".x" in col])
+
+    columns_to_drop = []
+
+    # For each feature, compute spherical coordinates
+    for feature in features:
+        x_col = f"{feature}.x"
+        y_col = f"{feature}.y"
+        z_col = f"{feature}.z"
+
+        if not all([x_col in df.columns, y_col in df.columns, z_col in df.columns]):
+            logger.warning(f"Feature {feature} does not have all three cartesian coordinates. Skipping feature.")
+            continue
+
+        r_col = f"{feature}_r"
+        df = df.with_columns((pl.col(x_col) ** 2 + pl.col(y_col) ** 2 + pl.col(z_col) ** 2).sqrt().alias(r_col))
+
+        theta_col = f"{feature}_theta"
+        df = df.with_columns(np.arccos(pl.col(z_col) / pl.col(r_col)).alias(theta_col))
+        # Replace NaN values in theta_col with 0 for x=y=z=0 case
+        df = df.with_columns(pl.col(theta_col).fill_nan(0).alias(theta_col))
+
+        phi_col = f"{feature}_phi"
+        df = df.with_columns(np.arctan2(pl.col(y_col), pl.col(x_col)).alias(phi_col))
+
+        columns_to_drop.extend([x_col, y_col, z_col])
+
+    if drop:
+        df = df.drop(columns_to_drop)
+
+    return df
+
+
 @app.command()
 def main(
     input_path: Path = PILOT_DATA_DIR,
@@ -111,7 +155,7 @@ def main(
     Args:
         input_path (Path): Path to the directory containing the pilot data.
         output_path (Path): Path to save the processed data to.
-        save (bool): Whether to save the processed data to a CSV file.
+        save (bool): Whether to save the processed data to a CSV file. Default False.
     """
     activity_categories = ["walk", "jog", "run", "jump"]
     total_df = None
@@ -144,6 +188,8 @@ def main(
 
             df = _add_time_column(c3d_contents, df)
 
+            # df = _cartesian_to_spherical(df)
+
             df = df.with_columns(pl.lit(trial_count).cast(pl.Int16).alias("TRIAL"))
             trial_count += 1
 
@@ -153,8 +199,8 @@ def main(
         total_df.write_csv(output_path)
         logger.success(f"Output saved to: {output_path}")
     else:
-        logger.success("Process complete, data not saved.")
         print(total_df.describe(), total_df.head())
+        logger.success("Process complete, data not saved.")
 
 
 if __name__ == "__main__":
