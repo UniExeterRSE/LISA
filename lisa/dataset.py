@@ -8,7 +8,7 @@ from ezc3d import c3d
 from loguru import logger
 from tqdm import tqdm
 
-from lisa.config import INTERIM_DATA_DIR, PILOT_DATA_DIR
+from lisa.config import INTERIM_DATA_DIR, LABELLED_TEST_DATA_DIR
 
 app = typer.Typer()
 
@@ -143,9 +143,10 @@ def _cartesian_to_spherical(df: pl.DataFrame, drop: bool = True) -> pl.DataFrame
 
 @app.command()
 def main(
-    input_path: Path = PILOT_DATA_DIR,
-    output_path: Path = INTERIM_DATA_DIR / "pilot_data.csv",
+    input_path: Path = LABELLED_TEST_DATA_DIR,
+    output_path: Path = INTERIM_DATA_DIR / "labelled_test_data.csv",
     save: bool = typer.Option(False, help="Flag to save the processed data to CSV"),
+    imu_label: bool = typer.Option(False, help="Flag if IMU data has location labels"),
 ):
     """
     Process pilot data and save to CSV.
@@ -156,16 +157,22 @@ def main(
         input_path (Path): Path to the directory containing the pilot data.
         output_path (Path): Path to save the processed data to.
         save (bool): Whether to save the processed data to a CSV file. Default False.
+        imu_label (bool): Flag if IMU data has location labels. Default False.
     """
     activity_categories = ["walk", "jog", "run", "jump"]
     total_df = None
     trial_count = 0
 
     for filename in tqdm(os.listdir(input_path)):
-        # Ignore any non-c3d files or files that don't start with the activity categories, i.e. calibration files
-        if filename.endswith(".c3d") and any(activity in filename.lower() for activity in activity_categories):
+        # Ignore any non-c3d files, transition files or files that don't start with the activity categories,
+        # i.e. calibration files
+        if (
+            filename.endswith(".c3d")
+            and any(activity in filename.lower() for activity in activity_categories)
+            and "transition" not in filename.lower()
+        ):
             logger.info(f"Processing file: {filename}")
-            file = os.path.join(PILOT_DATA_DIR, filename)
+            file = os.path.join(input_path, filename)
 
             c3d_contents = c3d(file)
 
@@ -178,22 +185,39 @@ def main(
 
             df.columns = _find_column_names(c3d_contents)
 
-            to_remove = ["Force", "Moment", "Velocity", "Angle.Pitch", "Length.Sway"]
+            if imu_label:
+                placement_labels = ["foot", "shank", "thigh", "pelvis"]
+                filtered_columns = [
+                    col for col in df.columns if any(label in col.lower() for label in placement_labels)
+                ]
+                df = df.select(filtered_columns)
+            else:
+                to_remove = [
+                    "Force",
+                    "Moment",
+                    "Velocity",
+                    "Angle.Pitch",
+                    "Length.Sway",
+                ]
+                columns_to_remove = [col for col in df.columns if any(sub in col for sub in to_remove)]
+                df = df.drop(columns_to_remove)
 
-            columns_to_remove = [col for col in df.columns if any(sub in col for sub in to_remove)]
-
-            df = df.drop(columns_to_remove)
-
+            # Add 'ACTIVITY', 'TIME' and 'TRIAL' columns
             df = df.with_columns(pl.lit(_find_activity_category(filename, activity_categories)).alias("ACTIVITY"))
-
             df = _add_time_column(c3d_contents, df)
+            df = df.with_columns(pl.lit(trial_count).cast(pl.Int16).alias("TRIAL"))
 
             # df = _cartesian_to_spherical(df)
-
-            df = df.with_columns(pl.lit(trial_count).cast(pl.Int16).alias("TRIAL"))
             trial_count += 1
 
-            total_df = df if total_df is None else total_df.vstack(df)
+            # Check for columns in df that are not in total_df
+            if total_df is not None:
+                df_columns = set(df.columns)
+                total_df_columns = set(total_df.columns)
+                extra_columns = df_columns - total_df_columns
+                if extra_columns:
+                    logger.warn(f"The following columns in df are not in total_df: {extra_columns}")
+            total_df = df if total_df is None else total_df.vstack(df.select(total_df.columns))
 
     if save:
         total_df.write_csv(output_path)
