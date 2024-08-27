@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import joblib
+import polars as pl
 import typer
 from loguru import logger
-from tqdm import tqdm
+from sklearn import metrics
 
 from lisa.config import MODELS_DIR, PROCESSED_DATA_DIR
 
@@ -11,19 +13,40 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
-    features_path: Path = PROCESSED_DATA_DIR / "test_features.csv",
-    model_path: Path = MODELS_DIR / "model.pkl",
-    predictions_path: Path = PROCESSED_DATA_DIR / "test_predictions.csv",
-    # -----------------------------------------
+    features_path: Path = PROCESSED_DATA_DIR / "labelled_test_data.csv",
+    model_path: Path = MODELS_DIR / "logistic_regression.pkl",
+    scaler_path: Path = MODELS_DIR / "logistic_regression_scaler.pkl",
 ):
-    # ---- REPLACE THIS WITH YOUR OWN CODE ----
-    logger.info("Performing inference for model...")
-    for i in tqdm(range(10), total=10):
-        if i == 5:
-            logger.info("Something happened for iteration 5.")
+    """
+    Load model and scaler from pkl files and apply them to a new dataset.
+    """
+    # Load the model and scaler
+    logger.info(f"Loading model from {model_path}")
+    model = joblib.load(model_path)
+
+    logger.info(f"Loading scaler from {scaler_path}")
+    scaler = joblib.load(scaler_path)
+
+    # Load the dataset
+    logger.info(f"Loading features from {features_path}")
+    features = pl.read_csv(features_path)
+
+    X = features.select(pl.exclude(["ACTIVITY", "TRIAL", "TIME"]))
+    y = features.select("ACTIVITY")
+
+    # Apply the scaler to the dataset
+    logger.info("Scaling the features")
+    X = scaler.transform(X)
+
+    # Perform predictions
+    logger.info("Performing predictions")
+
+    cm = metrics.confusion_matrix(y, model.predict(X), normalize="true")
+
+    logger.info("Score: " + str(model.score(X, y)))
+    logger.info("Confusion Matrix:\n" + str(cm))
+
     logger.success("Inference complete.")
-    # -----------------------------------------
 
 
 if __name__ == "__main__":
