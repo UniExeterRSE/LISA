@@ -1,3 +1,4 @@
+import pickle
 from pathlib import Path
 from pickle import dump
 
@@ -76,7 +77,9 @@ def train_test_split(df: pl.DataFrame, train_size: float, gap: int = 0) -> list:
     ]
 
 
-def standard_scaler(X_train: pl.DataFrame, X_test: pl.DataFrame) -> tuple[ndarray, (ndarray | spmatrix)]:
+def standard_scaler(
+    X_train: pl.DataFrame, X_test: pl.DataFrame
+) -> tuple[ndarray, (ndarray | spmatrix), StandardScaler]:
     """
     Standardizes the input data.
 
@@ -85,13 +88,13 @@ def standard_scaler(X_train: pl.DataFrame, X_test: pl.DataFrame) -> tuple[ndarra
         X_test (pl.DataFrame): The test data to be standardised.
 
     Returns:
-        tuple[ndarray, (ndarray | spmatrix)]: The standardised training and test data.
+        tuple[ndarray, (ndarray | spmatrix), StandardScaler]: The standardised training and test data, and scaler.
     """
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    return X_train, X_test
+    return X_train, X_test, scaler
 
 
 def logistic_regression(X_train: ndarray, y_train: ndarray) -> OneVsRestClassifier:
@@ -132,14 +135,16 @@ def main(
     # TODO gap should be set my same variable as sliding window period in features.py
     X_train, X_test, y_train, y_test = train_test_split(df, train_size=0.8, gap=300)
 
-    X_train, X_test = standard_scaler(X_train, X_test)
+    X_train, X_test, scaler = standard_scaler(X_train, X_test)
 
     model = logistic_regression(X_train, y_train)
 
-    # save model to pickle file
+    # save scaler and model to pickle file
     if save:
+        with open(model_path.with_stem(model_path.stem + "_scaler"), "wb") as f:
+            dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
         with open(model_path, "wb") as f:
-            dump(model, f, protocol=5)
+            dump(model, f, protocol=pickle.HIGHEST_PROTOCOL)
         logger.success(f"Model saved to: {model_path}")
 
     # evaluate model

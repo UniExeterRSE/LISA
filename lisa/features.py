@@ -75,8 +75,8 @@ def sliding_window(df: pl.DataFrame, period: int = 300, log: bool = False) -> pl
 
 @app.command()
 def main(
-    input_path: Path = INTERIM_DATA_DIR / "pilot_data.csv",
-    output_path: Path = PROCESSED_DATA_DIR / "pilot_data.csv",
+    input_path: Path = INTERIM_DATA_DIR / "labelled_test_data.csv",
+    output_path: Path = PROCESSED_DATA_DIR / "labelled_test_data.csv",
     save: bool = typer.Option(False, help="Flag to save the processed data to CSV"),
 ):
     """
@@ -87,7 +87,7 @@ def main(
     Args:
         input_path (Path): Path to the directory containing the pilot data.
         output_path (Path): Path to save the processed data to.
-        save (bool): Whether to save the processed data to a CSV file.
+        save (bool): Whether to save the processed data to a CSV file Defaults False.
     """
     df = pl.read_csv(input_path)
 
