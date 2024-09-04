@@ -1,28 +1,18 @@
-import matplotlib as plt
-import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn import metrics
 
 
-def confusion_matrix(model, labels, X_test, y_test, save=False):
+def confusion_matrix(model, labels, X_test, y_test, savepath=None):
     cm = metrics.confusion_matrix(y_test, model.predict(X_test), labels=labels, normalize="true")
-    # TODO use confusionmatrixdisplay?
-    if save:
-        plt.figure(figsize=(9, 9))
-        sns.heatmap(
-            cm,
-            annot=True,
-            fmt=".2%",
-            linewidths=0.5,
-            square=True,
-            cmap="Blues_r",
-            xticklabels=labels,
-            yticklabels=labels,
-        )
-        plt.ylabel("Actual label")
-        plt.xlabel("Predicted label")
+    if savepath:
+        disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+        fig, ax = plt.subplots(figsize=(5, 5))
+        disp.plot(ax=ax, cmap="Blues_r", values_format=".2%", colorbar=False)
         all_sample_title = f"Score: {str(model.score(X_test, y_test))}"
-        plt.title(all_sample_title, size=15)
-        # save fig
+        ax.set_title(all_sample_title, size=15)
+        # TODO move to tmp dir
+        plt.savefig(savepath)
+        plt.close(fig)
 
     return cm
 

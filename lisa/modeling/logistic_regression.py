@@ -27,6 +27,7 @@ def logistic_regression(X_train: ndarray, y_train: ndarray) -> OneVsRestClassifi
     Returns:
         OneVsRestClassifier: The trained logistic regression model.
     """
+    # TODO try n_jobs=-1
     logisticRegr = OneVsRestClassifier(LogisticRegression())
 
     logisticRegr.fit(X_train, y_train)
