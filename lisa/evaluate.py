@@ -10,7 +10,6 @@ def confusion_matrix(model, labels, X_test, y_test, savepath=None):
         disp.plot(ax=ax, cmap="Blues_r", values_format=".2%", colorbar=False)
         all_sample_title = f"Score: {str(model.score(X_test, y_test))}"
         ax.set_title(all_sample_title, size=15)
-        # TODO move to tmp dir
         plt.savefig(savepath)
         plt.close(fig)
 

@@ -9,10 +9,8 @@ import polars as pl
 import typer
 from loguru import logger
 from mlflow.models import infer_signature
-from scipy.stats import randint
 from sklearn import metrics
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import RandomizedSearchCV
 
 from lisa import evaluate
 from lisa.config import MODELS_DIR, PROCESSED_DATA_DIR
@@ -42,14 +40,6 @@ def random_forest_classifier(
     rf.fit(X_train, y_train)
 
     return rf
-
-    param_dist = {"n_estimators": randint(50, 500), "max_depth": randint(1, 20)}
-    rf = RandomForestClassifier()
-    # Use random search to find the best hyperparameters
-    rand_search = RandomizedSearchCV(rf, param_distributions=param_dist, n_iter=5, cv=5, n_jobs=-1)
-    rand_search.fit(X_train, y_train)
-
-    return rand_search
 
 
 @app.command()
@@ -89,10 +79,6 @@ def main(
                 params = {"n_estimators": 100, "max_depth": 128}
 
                 model = random_forest_classifier(scaled_X_train, y_train.to_numpy().ravel(), **params)
-                # model = rand_search.best_estimator_
-
-                # # Print the best hyperparameters
-                # logger.info("Best hyperparameters:", rand_search.best_params_)
 
                 # save scaler and model to pickle file
                 if save:

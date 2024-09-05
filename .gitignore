@@ -6,6 +6,7 @@
 
 # MLFlow
 /mlruns/
+/plots/tmp/
 
 # Mac OS-specific storage files
 .DS_Store
