@@ -23,10 +23,12 @@ PILOT_DATA_DIR = RAW_DATA_DIR / ONEDRIVE_DIR / "LISA 1 Pilot Data/Pilot 1/120724
 LABELLED_TEST_DATA_DIR = RAW_DATA_DIR / ONEDRIVE_DIR / "LISA 1 Pilot Data/P1_1608/160824_IMU_DC"
 
 MODELS_DIR = PROJ_ROOT / "models"
-PLOTS_DIR = PROJ_ROOT / "plots"
+ARTIFACTS_DIR = PROJ_ROOT / "artifacts"
 
 REPORTS_DIR = PROJ_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
+
+MLFLOW_URI = "http://127.0.0.1:8080"
 
 # If tqdm is installed, configure loguru with tqdm.write
 # https://github.com/Delgan/loguru/issues/135

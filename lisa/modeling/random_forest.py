@@ -1,3 +1,4 @@
+import json
 import pickle
 import time
 from pathlib import Path
@@ -9,12 +10,20 @@ import polars as pl
 import typer
 from loguru import logger
 from mlflow.models import infer_signature
+from scipy.stats import randint
 from sklearn import metrics
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import RandomizedSearchCV
 
 from lisa import evaluate
-from lisa.config import MODELS_DIR, PROCESSED_DATA_DIR
-from lisa.features import standard_scaler, train_test_split
+from lisa.config import (
+    ARTIFACTS_DIR,
+    INTERIM_DATA_DIR,
+    MLFLOW_URI,
+    MODELS_DIR,
+    PROCESSED_DATA_DIR,
+)
+from lisa.features import sliding_window, standard_scaler, train_test_split
 
 app = typer.Typer()
 
@@ -40,6 +49,82 @@ def random_forest_classifier(
     rf.fit(X_train, y_train)
 
     return rf
+
+
+def hyperparam_tuning(input_path: Path = INTERIM_DATA_DIR / "labelled_test_data.csv"):
+    original_df = pl.read_csv(input_path)
+
+    mlflow.set_tracking_uri(uri=MLFLOW_URI)
+
+    # Create a new MLflow Experiment
+    mlflow.set_experiment("RF Test")
+    window = 300
+    split = 1.0
+    with mlflow.start_run(nested=True, run_name=f"W_{window}:S_{split}"):
+        #  Feature engineering with params
+        df = sliding_window(original_df, period=window, log=True)
+
+        X_train, _, y_train, _ = train_test_split(df, train_size=split, gap=window)
+
+        # Tune model
+        param_dist = {"n_estimators": randint(50, 100), "max_depth": randint(10, 100)}
+
+        rf = RandomForestClassifier()
+        # Use random search to find the best hyperparameters
+        rand_search = RandomizedSearchCV(
+            rf,
+            param_distributions=param_dist,
+            n_iter=1,
+            cv=2,
+            verbose=3,
+            n_jobs=-1,
+            pre_dispatch=1,
+            random_state=42,
+        )
+        rand_search.fit(X_train, y_train.to_numpy().ravel())
+
+        model = rand_search.best_estimator_
+
+        # Print the best hyperparameters
+        logger.info("Best hyperparameters:", rand_search.best_params_)
+        params = rand_search.best_params_
+
+        # Log the hyperparameters
+        params["window"] = window
+        params["split"] = split
+        mlflow.log_params(params)
+
+        # Extract and log feature importances
+        # TODO analyse feature importance statistics
+        feature_importances = model.feature_importances_
+        indices = np.argsort(feature_importances)[::-1]
+        feature_names = X_train.columns
+        feature_importance_dict = {
+            feature_names[indices[i]]: feature_importances[indices[i]] for i in range(len(feature_importances))
+        }
+        sorted_feature_importance_dict = dict(
+            sorted(feature_importance_dict.items(), key=lambda item: item[1], reverse=True)
+        )
+
+        feature_importances_path = ARTIFACTS_DIR / "feature_importances.json"
+        with open(feature_importances_path, "w") as f:
+            json.dump(sorted_feature_importance_dict, f, indent=4)
+        mlflow.log_artifact(feature_importances_path)
+
+        # Set a tag that we can use to remind ourselves what this run was for
+        mlflow.set_tag("Training Info", "Tuned RF model for labelled test data")
+
+        # Infer the model signature
+        pd_X_train = X_train.to_pandas()
+        signature = infer_signature(pd_X_train, model.predict(pd_X_train))
+
+        # Log the model
+        mlflow.sklearn.log_model(
+            sk_model=model,
+            artifact_path="rf_model",
+            signature=signature,
+            input_example=pd_X_train,
+        )
 
 
 @app.command()
