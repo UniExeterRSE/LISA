@@ -95,7 +95,6 @@ def hyperparam_tuning(input_path: Path = INTERIM_DATA_DIR / "labelled_test_data.
         mlflow.log_params(params)
 
         # Extract and log feature importances
-        # TODO analyse feature importance statistics
         feature_importances = model.feature_importances_
         indices = np.argsort(feature_importances)[::-1]
         feature_names = X_train.columns
