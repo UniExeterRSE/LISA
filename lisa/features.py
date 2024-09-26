@@ -105,8 +105,12 @@ def sliding_window(df: pl.DataFrame, period: int = 300, log: bool = False) -> pl
         polars.DataFrame: The aggregated DataFrame with rolling window statistics.
 
     """
-    # List of columns to exclude from aggregation
-    exclude_columns = ["TIME", "TRIAL", "ACTIVITY"]
+    # List of categorical columns; one per trial
+    categorical_columns = ["ACTIVITY", "SPEED", "INCLINE"]
+
+    # List of other columns to exclude from aggregation
+    exclude_columns = ["TIME", "TRIAL"]
+    exclude_columns.extend(categorical_columns)
 
     # Get the list of columns to aggregate
     columns_to_aggregate = [col for col in df.columns if col not in exclude_columns]
@@ -147,10 +151,14 @@ def sliding_window(df: pl.DataFrame, period: int = 300, log: bool = False) -> pl
             "Time does not reset to 0 when TRIAL increases by 1. Unable to remove rows before first full window."
         )
 
-    # Add the ACTIVITY column back in by matching TRIAL
-    # Assumes every trial has one activity type
-    activity_map = dict(zip(df["TRIAL"], df["ACTIVITY"], strict=True))
-    result = result.with_columns(ACTIVITY=pl.col("TRIAL").replace_strict(activity_map))
+    # Add the categorical columns back in by matching TRIAL
+    def _add_columns_back(result, df, columns):
+        for column in columns:
+            column_map = dict(zip(df["TRIAL"], df[column], strict=True))
+            result = result.with_columns(pl.col("TRIAL").replace_strict(column_map).alias(column))
+        return result
+
+    result = _add_columns_back(result, df, categorical_columns)
 
     return result
 
