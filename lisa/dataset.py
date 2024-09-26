@@ -141,25 +141,20 @@ def _cartesian_to_spherical(df: pl.DataFrame, drop: bool = True) -> pl.DataFrame
     return df
 
 
-@app.command()
-def main(
-    input_path: Path = LABELLED_TEST_DATA_DIR,
-    output_path: Path = INTERIM_DATA_DIR / "labelled_test_data.csv",
-    save: bool = typer.Option(False, help="Flag to save the processed data to CSV"),
-    imu_label: bool = typer.Option(False, help="Flag if IMU data has location labels"),
-):
+def process_data(input_path: Path, activity_categories: list[str], imu_label: bool = False) -> pl.DataFrame:
     """
-    Process pilot data and save to CSV.
-    Removes unwanted columns, add an 'ACTIVITY' column based on the filename
-    and combines all c3d files into one dataset.
+    Process c3d files in the given directory and return a single DataFrame.
+    Removes unwanted columns, add an 'ACTIVITY' column based on the filename.
 
     Args:
-        input_path (Path): Path to the directory containing the pilot data.
+        input_path (Path): Path to the directory containing the data.
+        activity_categories (list[str]): A list of activity categories to search for.
         output_path (Path): Path to save the processed data to.
-        save (bool): Whether to save the processed data to a CSV file. Default False.
         imu_label (bool): Flag if IMU data has location labels. Default False.
+
+    Returns:
+        pl.DataFrame: The processed data.
     """
-    activity_categories = ["walk", "jog", "run", "jump"]
     total_df = None
     trial_count = 0
 
@@ -219,12 +214,30 @@ def main(
                     logger.warn(f"The following columns in df are not in total_df: {extra_columns}")
             total_df = df if total_df is None else total_df.vstack(df.select(total_df.columns))
 
-    if save:
-        total_df.write_csv(output_path)
-        logger.success(f"Output saved to: {output_path}")
-    else:
-        print(total_df.describe(), total_df.head())
-        logger.success("Process complete, data not saved.")
+    return total_df
+
+
+@app.command()
+def main(
+    input_path: Path = LABELLED_TEST_DATA_DIR,
+    output_path: Path = INTERIM_DATA_DIR / "labelled_test_data.csv",
+    imu_label: bool = typer.Option(False, help="Flag if IMU data has location labels"),
+):
+    """
+    Process pilot data and save to CSV.
+    Combines all c3d files into one dataset.
+
+    Args:
+        input_path (Path): Path to the directory containing the pilot data.
+        output_path (Path): Path to save the processed data to.
+        imu_label (bool): Flag if IMU data has location labels. Default False.
+    """
+    activity_categories = ["walk", "jog", "run", "jump"]
+
+    data = process_data(input_path, activity_categories, imu_label)
+
+    data.write_csv(output_path)
+    logger.success(f"Output saved to: {output_path}")
 
 
 if __name__ == "__main__":
