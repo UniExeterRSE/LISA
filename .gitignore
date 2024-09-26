@@ -4,6 +4,10 @@
 # Custom
 /references/
 
+# MLFlow
+/mlruns/
+/artifacts/
+
 # Mac OS-specific storage files
 .DS_Store
 

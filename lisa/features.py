@@ -3,8 +3,6 @@ from pathlib import Path
 import polars as pl
 import typer
 from loguru import logger
-from numpy import ndarray
-from scipy.sparse import spmatrix
 from sklearn.preprocessing import StandardScaler
 
 from lisa.config import INTERIM_DATA_DIR, PROCESSED_DATA_DIR
@@ -72,9 +70,7 @@ def train_test_split(df: pl.DataFrame, train_size: float, gap: int = 0) -> list[
     ]
 
 
-def standard_scaler(
-    X_train: pl.DataFrame, X_test: pl.DataFrame
-) -> tuple[ndarray, (ndarray | spmatrix), StandardScaler]:
+def standard_scaler(X_train: pl.DataFrame, X_test: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, StandardScaler]:
     """
     Standardizes the input data.
 
@@ -83,11 +79,14 @@ def standard_scaler(
         X_test (pl.DataFrame): The test data to be standardised.
 
     Returns:
-        tuple[ndarray, (ndarray | spmatrix), StandardScaler]: The standardised training and test data, and scaler.
+        tuple[pl.DataFrame, pl.DataFrame, StandardScaler]: The standardised training and test data, and scaler.
     """
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    X_train = pl.from_numpy(X_train_scaled, schema=X_train.schema)
+    X_test = pl.from_numpy(X_test_scaled, schema=X_test.schema)
 
     return X_train, X_test, scaler
 
