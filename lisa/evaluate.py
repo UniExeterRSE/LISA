@@ -4,10 +4,32 @@ from collections import defaultdict
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import polars as pl
 from sklearn import metrics
+from sklearn.base import BaseEstimator
 
 
-def confusion_matrix(model, labels, X_test, y_test, savepath=None):
+def confusion_matrix(
+    model: BaseEstimator,
+    labels: pl.Series,
+    X_test: pl.DataFrame,
+    y_test: pl.DataFrame,
+    savepath: Path = None,
+):
+    """
+    Generate a confusion matrix for the model and save it to a file if a savepath is provided.
+
+    Args:
+        model (BaseEstimator): The trained model.
+        labels (pl.Series): The category labels.
+        X_test (pl.DataFrame): The test features.
+        y_test (pl.DataFrame): The test labels.
+        savepath (Path, optional): The path to save the confusion matrix plot. Defaults to None.
+
+    Returns:
+        np.ndarray: The confusion matrix.
+
+    """
     cm = metrics.confusion_matrix(y_test, model.predict(X_test), labels=labels, normalize="true")
     if savepath:
         disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
