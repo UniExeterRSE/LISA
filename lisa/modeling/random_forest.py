@@ -17,7 +17,7 @@ from sklearn.model_selection import RandomizedSearchCV
 
 from lisa import evaluate
 from lisa.config import ARTIFACTS_DIR, INTERIM_DATA_DIR, MLFLOW_URI, MODELS_DIR
-from lisa.features import sliding_window, standard_scaler, train_test_split
+from lisa.features import sequential_stratified_split, sliding_window, standard_scaler
 
 
 def random_forest_classifier(
@@ -89,7 +89,7 @@ def main(
                 with mlflow.start_run(nested=True, run_name=f"W_{window}:S_{split}"):
                     df = sliding_window(input_df, period=window, log=True)
 
-                    X_train, X_test, y_train, y_test = train_test_split(df, train_size=split, gap=window)
+                    X_train, X_test, y_train, y_test = sequential_stratified_split(df, train_size=split, gap=window)
 
                     if n_iter == 1:
                         X_train, X_test, scaler = standard_scaler(X_train, X_test)

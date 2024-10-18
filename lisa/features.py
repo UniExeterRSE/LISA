@@ -10,18 +10,28 @@ from lisa.config import INTERIM_DATA_DIR, PROCESSED_DATA_DIR
 app = typer.Typer()
 
 
-def train_test_split(df: pl.DataFrame, train_size: float, gap: int = 0) -> list[pl.DataFrame]:
+def sequential_stratified_split(
+    df: pl.DataFrame,
+    train_size: float,
+    gap: int = 0,
+    feature_cols: list[str] = ["ACTIVITY"],
+) -> list[pl.DataFrame]:
     """
     Splits the input dataframe into train and test sets.
-    Each activity is split separately and sequentially in time, and then recombined.
+    The data remains sequential (not shuffled), trials are not shared between train and test sets,
+    and a gap of {gap} rows is left between the train and test sets.
+    The split attempts to keep a balanced proportion of each feature in both sets;
+    this can be checked with check_split_balance().
 
     Args:
         df (pl.Dataframe): The input dataframe to be split.
         train_size (float): The proportion of rows to be included in the train set, between 0.0 and 1.0.
         gap (int, optional): The number of rows to leave as a gap between the train and test sets. Defaults to 0.
+        feature_cols (list[str], optional): The list of feature columns to include in the split, to allow for multiple
+            y features. Defaults to ['ACTIVITY'].
 
     Returns:
-        list: A list containing train-test split of inputs, i.e. [X_train, X_test, y_train, y_test].
+        list: A list containing train-test split of inputs, i.e. [X_train, X_test, y1_train, y1_test, y2_train, ...].
     """
 
     # Ensure train_size is between 0 and 1
@@ -38,10 +48,19 @@ def train_test_split(df: pl.DataFrame, train_size: float, gap: int = 0) -> list[
     if "TIME" not in df.columns:
         logger.warning("TIME column not found in the dataframe.")
 
-    for activity in df["ACTIVITY"].unique(maintain_order=True):
-        activity_df = df.filter(pl.col("ACTIVITY") == activity)
+    # Combine feature columns into a single column
+    combined_feat_name = "_".join(feature_cols)
+    df = df.with_columns(
+        pl.concat_str(
+            [pl.col(col).fill_null("").cast(pl.Utf8) for col in feature_cols],
+            separator="_",
+        ).alias(combined_feat_name)
+    )
+    # For each unique feature combination, split the data
+    for feature in df[combined_feat_name].unique(maintain_order=True):
+        feature_df = df.filter(pl.col(combined_feat_name) == feature)
 
-        n_rows = activity_df.height
+        n_rows = feature_df.height
         if n_rows < min_n_rows:
             min_n_rows = n_rows
 
@@ -49,25 +68,81 @@ def train_test_split(df: pl.DataFrame, train_size: float, gap: int = 0) -> list[
         train_split = int(train_size * n_rows)
         test_split = train_split + gap
 
+        # Adjust train_split to the closest index where 'TRIAL' changes,
+        # to avoid same trial being in test and train sets
+        trial_values = feature_df["TRIAL"].to_list()
+        for index in range(train_split, n_rows):
+            if trial_values[index] != trial_values[train_split]:
+                train_split = index
+                test_split = train_split + gap
+                break
+            # Account for edge case of last trial being below split threshold
+            elif trial_values[index] == max(trial_values):
+                unique_index = sorted(set(trial_values)).index(trial_values[index])
+                lower_trial = sorted(set(trial_values))[unique_index - 1]
+                train_split = max((i for i, x in enumerate(trial_values) if x == lower_trial))
+                test_split = train_split + gap
+                break
+
         # Extract the first train_size% of rows
-        activity_train_df = activity_df[:train_split]
+        feature_train_df = feature_df[:train_split]
 
         # Extract the next 1-train_size% of rows, leaving a gap of {gap} rows
-        activity_test_df = activity_df[test_split:]
+        feature_test_df = feature_df[test_split:]
 
-        train_df = train_df.vstack(activity_train_df)
-        test_df = test_df.vstack(activity_test_df)
+        train_df = train_df.vstack(feature_train_df)
+        test_df = test_df.vstack(feature_test_df)
 
     # Check if gap is between 0 and min_n_rows
     if not (0 <= gap <= min_n_rows):
         raise ValueError(f"Gap must be between 0 and {min_n_rows}, but got {gap}.")
 
-    return [
-        train_df.select(pl.exclude(["ACTIVITY", "TRIAL", "TIME"])),
-        test_df.select(pl.exclude(["ACTIVITY", "TRIAL", "TIME"])),
-        train_df.select("ACTIVITY"),
-        test_df.select("ACTIVITY"),
+    # Check if any trials are in both train and test sets
+    common_trials = train_df["TRIAL"].value_counts().join(test_df["TRIAL"].value_counts(), on="TRIAL", how="inner")
+    if not (common_trials.is_empty()):
+        raise Warning(f"{common_trials.height} trials are in both train and test sets.")
+
+    # Generate X data
+    splits = [
+        train_df.select(pl.exclude(["TRIAL", "TIME", combined_feat_name] + feature_cols)),
+        test_df.select(pl.exclude(["TRIAL", "TIME", combined_feat_name] + feature_cols)),
     ]
+    # Generate y data
+    for feature in feature_cols:
+        splits.extend([train_df.select(feature), test_df.select(feature)])
+
+    return splits
+
+
+def check_split_balance(y_test: pl.DataFrame, y_train: pl.DataFrame, threshold: float = 0.05) -> pl.DataFrame:
+    """
+    Helper function to check that the spread of values in the test and train sets are roughly similar.
+
+    Args:
+        y_test (pl.DataFrame): The test set
+        y_train (pl.DataFrame): The train set
+        tolerance (float, optional): The threshold for the difference between the two proportions, between 0 and 1.
+            Defaults to 0.05.
+
+    Returns:
+        pl.DataFrame: A DataFrame containing the values that exceed the threshold, if any.
+    """
+    if y_test.columns != y_train.columns:
+        raise ValueError("The DataFrames must have the same columns")
+    feature_name = y_test.columns[0]
+
+    # Calculate the proportion of each value in the test and train sets
+    train_proportions = y_train.to_series().value_counts(sort=True, normalize=True)
+    test_proportions = y_test.to_series().value_counts(sort=True, normalize=True)
+
+    # Join the two DataFrames on the common column
+    df_merged = train_proportions.join(test_proportions, on=feature_name, how="inner", suffix="_test")
+
+    # Calculate the absolute difference between the 'proportion' columns
+    df_diff = df_merged.with_columns((pl.col("proportion") - pl.col("proportion_test")).abs().alias("diff"))
+
+    # Filter rows where the difference exceeds the threshold
+    return df_diff.filter(pl.col("diff") > threshold)
 
 
 def standard_scaler(X_train: pl.DataFrame, X_test: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, StandardScaler]:
