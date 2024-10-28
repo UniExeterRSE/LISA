@@ -41,7 +41,20 @@ def logistic_regression(X_train: ndarray, y_train: ndarray) -> OneVsRestClassifi
     return logisticRegr
 
 
-def linear_regression_script(X_train, X_test, y_train, y_test):
+def linear_regressor(X_train: ndarray, X_test: ndarray, y_train: ndarray, y_test: ndarray) -> tuple[ndarray, float]:
+    """
+    Fits a linear regression model to the input data.
+    Filters out the rows with null values (non-locomotion activities) before fitting.
+
+    Args:
+        X_train (ndarray): The training data.
+        X_test (ndarray): The test data.
+        y_train (ndarray): The training labels.
+        y_test (ndarray): The test labels.
+
+    Returns:
+        tuple[ndarray, float]: The predicted values and the model score.
+    """
     model = LinearRegression(n_jobs=-1)
 
     # Filter out the rows with null values (non-locomotion)
@@ -61,11 +74,58 @@ def linear_regression_script(X_train, X_test, y_train, y_test):
     return y_pred, y_score
 
 
+# TODO test this works
+def _regressor_script(
+    feature_name: str,
+    df: pl.DataFrame,
+    X_train: ndarray,
+    X_test: ndarray,
+    y_train: ndarray,
+    y_test: ndarray,
+) -> tuple[float, Path]:
+    """
+    Script set-up and tear-down for fitting linear regressor.
+    Logs any imbalance in train-test split, fits the model, and saves the histogram plot.
+
+    Args:
+        feature_name (str): The name of the feature to predict, i.e 'Speed'.
+        df (pl.DataFrame): The full DataFrame.
+        X_train (ndarray): The training data.
+        X_test (ndarray): The test data.
+        y_train (ndarray): The training labels.
+        y_test (ndarray): The test labels.
+
+    Returns:
+        tuple[float, Path]: The model score and the path to the histogram plot.
+    """
+    if not check_split_balance(y_train, y_test).is_empty():
+        logger.info(f"{feature_name} unbalance: {check_split_balance(y_train, y_test)}")
+
+    y_pred, y_score = linear_regressor(X_train, X_test, y_train, y_test)
+
+    y_plot_path = ARTIFACTS_DIR / f"{feature_name}_hist.png"
+    hist = regression_histogram(df, y_pred, feature_name)
+
+    hist.savefig(y_plot_path)
+
+    return y_score, y_plot_path
+
+
 def multipredictor(
     data_path: Path = INTERIM_DATA_DIR / "labelled_test_data.csv",
     window: int = 300,
     split: float = 0.8,
 ):
+    """
+    Runs a multimodel predictor on the input data.
+    Classifies activity, and predicts speed and incline.
+    Three separate models & scores are trained and logged to MLflow.
+
+    Args:
+        data_path (Path): Path to the data.
+        window (int): Size of the sliding window. Default 300.
+        split (float): Train-test split. Default 0.8.
+    """
     start_time = time.time()
     input_df = pl.read_csv(data_path)
 
@@ -90,7 +150,7 @@ def multipredictor(
         params["window"] = window
         params["split"] = split
         mlflow.log_params(params)
-
+        # TODO move each prediction into separate functions
         # Predict activity
         with mlflow.start_run(nested=True, run_name="activity classifier"):
             if not check_split_balance(y1_train, y1_test).is_empty():
@@ -102,37 +162,21 @@ def multipredictor(
 
             # Create and log confusion matrix
             labels = df["ACTIVITY"].unique(maintain_order=True)
-            cm_plot_path = ARTIFACTS_DIR / "confusion_matrix.png"
+            cm_plot_path = ARTIFACTS_DIR / "LR_confusion_matrix.png"
             cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
             logger.info("Confusion Matrix:\n" + str(cm))
             mlflow.log_artifact(cm_plot_path)
 
         # Predict speed
         with mlflow.start_run(nested=True, run_name="speed regressor"):
-            if not check_split_balance(y2_train, y2_test).is_empty():
-                logger.info(f"Speed unbalance: {check_split_balance(y2_train, y2_test)}")
-
-            y2_pred, y2_score = linear_regression_script(scaled_X_train, scaled_X_test, y2_train, y2_test)
+            y2_score, y2_plot_path = _regressor_script("Speed", df, scaled_X_train, scaled_X_test, y2_train, y2_test)
             mlflow.log_metric("score", y2_score)
-
-            y2_plot_path = ARTIFACTS_DIR / "speed_hist.png"
-            speed_hist = regression_histogram(df, y2_pred, "SPEED")
-
-            speed_hist.savefig(y2_plot_path)
             mlflow.log_artifact(y2_plot_path)
 
         # Predict incline
         with mlflow.start_run(nested=True, run_name="incline regressor"):
-            if not check_split_balance(y3_train, y3_test).is_empty():
-                logger.info(f"Activity unbalance: {check_split_balance(y3_train, y3_test)}")
-            y3_pred, y3_score = linear_regression_script(scaled_X_train, scaled_X_test, y3_train, y3_test)
-
+            y3_score, y3_plot_path = _regressor_script("Incline", df, scaled_X_train, scaled_X_test, y3_train, y3_test)
             mlflow.log_metric("score", y3_score)
-
-            y3_plot_path = ARTIFACTS_DIR / "incline_hist.png"
-            speed_hist = regression_histogram(df, y3_pred, "INCLINE")
-
-            speed_hist.savefig(y3_plot_path)
             mlflow.log_artifact(y3_plot_path)
 
     end_time = time.time()  # Record the end time

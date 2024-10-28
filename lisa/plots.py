@@ -27,8 +27,9 @@ def regression_histogram(df: pl.DataFrame, y_pred: np.ndarray, y_name: str) -> p
     # Normalise the histogram and bar scaling
     hist, bin_edges = np.histogram(y_pred, bins=50)
     bin_width = bin_edges[1] - bin_edges[0]
-    # TODO replace .sort() with value_counts(sort=True)
-    counts = df[y_name].value_counts().sort(y_name)
+    if y_name not in df.columns:
+        y_name = y_name.upper()
+    counts = df[y_name].value_counts(sort=True)
     bar_heights = counts["count"] / counts["count"].max() * hist.max()
 
     # Create the histogram and bar chart

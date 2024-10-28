@@ -158,17 +158,6 @@ def standard_scaler(X_train: pl.DataFrame, X_test: pl.DataFrame) -> tuple[pl.Dat
     """
     scaler = StandardScaler()
 
-    # # Convert all integer columns to Float64 to handle NaNs
-    # integer_columns = [
-    #     col for col in X_train.columns if X_train.schema[col] in [pl.Int32, pl.Int64]
-    # ]
-    # X_train = X_train.with_columns(
-    #     [pl.col(col).cast(pl.Float64) for col in integer_columns]
-    # )
-    # X_test = X_test.with_columns(
-    #     [pl.col(col).cast(pl.Float64) for col in integer_columns]
-    # )
-
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
