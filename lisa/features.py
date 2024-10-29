@@ -38,8 +38,8 @@ def sequential_stratified_split(
     if not (0 <= train_size <= 1):
         raise ValueError(f"train_size must be between 0 and 1, but got {train_size}.")
 
-    train_df = pl.DataFrame()
-    test_df = pl.DataFrame()
+    train_dfs = []
+    test_dfs = []
     min_n_rows = float("inf")
 
     # Check if correct columns in df
@@ -90,8 +90,11 @@ def sequential_stratified_split(
         # Extract the next 1-train_size% of rows, leaving a gap of {gap} rows
         feature_test_df = feature_df[test_split:]
 
-        train_df = train_df.vstack(feature_train_df)
-        test_df = test_df.vstack(feature_test_df)
+        train_dfs.append(feature_train_df)
+        test_dfs.append(feature_test_df)
+
+    train_df = pl.concat(train_dfs, rechunk=True)
+    test_df = pl.concat(test_dfs, rechunk=True)
 
     # Check if gap is between 0 and min_n_rows
     if not (0 <= gap <= min_n_rows):
