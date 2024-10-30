@@ -18,6 +18,8 @@ def sample_dataframe():
     )
 
 
+# TODO this should ignore the warning, but doesn't
+@pytest.mark.filterwarnings("ignore:.*trials are in both train and test sets.*:UserWarning")
 def test_sequential_stratified_split(sample_dataframe):
     """
     Test sequential_stratified_split function
@@ -67,7 +69,6 @@ def test_sequential_stratified_split(sample_dataframe):
         },
         strict=False,
     )
-    assert_frame_equal(test_labels, expected_test_labels, check_column_order=False, check_dtypes=False)
     assert_frame_equal(test_labels, expected_test_labels, check_column_order=False, check_dtypes=False)
 
 

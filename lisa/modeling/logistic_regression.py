@@ -272,4 +272,4 @@ def main(
 
 
 if __name__ == "__main__":
-    multipredictor()
+    main()

@@ -103,7 +103,7 @@ def sequential_stratified_split(
     # Check if any trials are in both train and test sets
     common_trials = train_df["TRIAL"].value_counts().join(test_df["TRIAL"].value_counts(), on="TRIAL", how="inner")
     if not (common_trials.is_empty()):
-        raise Warning(f"{common_trials.height} trials are in both train and test sets.")
+        raise UserWarning(f"{common_trials.height} trials are in both train and test sets.")
 
     # Generate X data
     splits = [
