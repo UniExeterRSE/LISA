@@ -199,8 +199,8 @@ def multipredictor(
 
         # Prepare data
         df = sliding_window(input_df, period=window, log=True)
-        X_train, X_test, y1_train, y1_test, y2_train, y2_test = sequential_stratified_split(
-            df, split, window, ["ACTIVITY", "INCLINE"]
+        X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
+            df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
         )
         scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
 
@@ -229,20 +229,20 @@ def multipredictor(
             mlflow.log_artifact(cm_plot_path)
 
         # Predict speed
-        # with mlflow.start_run(nested=True, run_name="speed regressor"):
-        #     y2_score, y2_plot_path, feature_importances_path = _regressor_script(
-        #         "Speed",
-        #         df,
-        #         scaled_X_train,
-        #         scaled_X_test,
-        #         y2_train,
-        #         y2_test,
-        #         hyperparams,
-        #     )
+        with mlflow.start_run(nested=True, run_name="speed regressor"):
+            y2_score, y2_plot_path, feature_importances_path = _regressor_script(
+                "Speed",
+                df,
+                scaled_X_train,
+                scaled_X_test,
+                y2_train,
+                y2_test,
+                hyperparams,
+            )
 
-        #     mlflow.log_metric("score", y2_score)
-        #     mlflow.log_artifact(y2_plot_path)
-        #     mlflow.log_artifact(feature_importances_path)
+            mlflow.log_metric("score", y2_score)
+            mlflow.log_artifact(y2_plot_path)
+            mlflow.log_artifact(feature_importances_path)
 
         # Predict incline
         with mlflow.start_run(nested=True, run_name="incline regressor"):
@@ -252,8 +252,8 @@ def multipredictor(
                 df,
                 scaled_X_train,
                 scaled_X_test,
-                y2_train,
-                y2_test,
+                y3_train,
+                y3_test,
                 hyperparams,
             )
 
