@@ -18,7 +18,7 @@ def main(
     scaler_path: Path = MODELS_DIR / "logistic_regression_scaler.pkl",
 ):
     """
-    Load model and scaler from pkl files and apply them to a new dataset.
+    Load a pre-trained model and scaler from pkl files and apply them to a new dataset.
     """
     # Load the model and scaler
     logger.info(f"Loading model from {model_path}")
