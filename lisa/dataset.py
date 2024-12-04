@@ -9,7 +9,7 @@ from ezc3d import c3d
 from loguru import logger
 from tqdm import tqdm
 
-from lisa.config import INTERIM_DATA_DIR, LABELLED_TEST_DATA_DIR
+from lisa.config import INTERIM_DATA_DIR, MAIN_DATA_DIR
 
 app = typer.Typer()
 
@@ -38,50 +38,6 @@ def _add_time_column(c: c3d, df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(time_series)
 
 
-def _find_column_names(c: c3d) -> list[str]:
-    """
-    Find column names in the given c3d object.
-    Give numeric labels to any repeated columns (i.e. different IMU devices).
-
-    Args:
-        c (c3d): The c3d object containing the data.
-
-    Returns:
-        list[str]: A list of modified column names.
-
-    """
-    # TODO Currently we cannot map between the same device positions in different files.
-    # Raw data will have to be updated.
-    columns = c["parameters"]["ANALOG"]["LABELS"]["value"]
-
-    # Count total occurrences of each item
-    total_occurrences = {}
-    for item in columns:
-        if item in total_occurrences:
-            total_occurrences[item] += 1
-        else:
-            total_occurrences[item] = 1
-
-    modified_columns = []
-    current_counts = {}
-
-    for item in columns:
-        # Only label items that appear more than once
-        if total_occurrences[item] > 1:
-            if item in current_counts:
-                current_counts[item] += 1
-            else:
-                current_counts[item] = 1
-            modified_item = f"D{current_counts[item]}_{item}"
-        else:
-            # If the item appears only once, keep it as is
-            modified_item = item
-
-        modified_columns.append(modified_item)
-
-    return modified_columns
-
-
 def _find_activity_category(filename: str, activity_categories: list[str]) -> str | None:
     """
     Find the activity category in the filename.
@@ -95,7 +51,7 @@ def _find_activity_category(filename: str, activity_categories: list[str]) -> st
     for activity in activity_categories:
         if activity in filename.lower():
             return activity
-    return None  # Return None or a default value if no match is found
+    return None
 
 
 def _find_incline(filename: str) -> int | None:
@@ -143,56 +99,12 @@ def _find_speed(filename: str) -> float | None:
     return speed
 
 
-def _cartesian_to_spherical(df: pl.DataFrame, drop: bool = True) -> pl.DataFrame:
-    """
-    Convert features with cartesian coordinates to spherical coordinates.
-
-    Args:
-        df (pl.DataFrame): The DataFrame containing the cartesian coordinates.
-        drop (bool): Whether to drop the original cartesian columns. Default True.
-
-    Returns:
-        pl.DataFrame: The DataFrame containing the spherical coordinates.
-    """
-    features = set([col.split(".")[0] for col in df.columns if ".x" in col])
-
-    columns_to_drop = []
-
-    # For each feature, compute spherical coordinates
-    for feature in features:
-        x_col = f"{feature}.x"
-        y_col = f"{feature}.y"
-        z_col = f"{feature}.z"
-
-        if not all([x_col in df.columns, y_col in df.columns, z_col in df.columns]):
-            logger.warning(f"Feature {feature} does not have all three cartesian coordinates. Skipping feature.")
-            continue
-
-        r_col = f"{feature}_r"
-        df = df.with_columns((pl.col(x_col) ** 2 + pl.col(y_col) ** 2 + pl.col(z_col) ** 2).sqrt().alias(r_col))
-
-        theta_col = f"{feature}_theta"
-        df = df.with_columns(np.arccos(pl.col(z_col) / pl.col(r_col)).alias(theta_col))
-        # Replace NaN values in theta_col with 0 for x=y=z=0 case
-        df = df.with_columns(pl.col(theta_col).fill_nan(0).alias(theta_col))
-
-        phi_col = f"{feature}_phi"
-        df = df.with_columns(np.arctan2(pl.col(y_col), pl.col(x_col)).alias(phi_col))
-
-        columns_to_drop.extend([x_col, y_col, z_col])
-
-    if drop:
-        df = df.drop(columns_to_drop)
-
-    return df
-
-
 def process_c3d(
     c3d_contents: c3d,
     filename: str,
     activity_categories: list[str],
-    imu_label_exists: bool,
     trial_count: int,
+    missing_label: str | None,
 ) -> pl.DataFrame | None:
     """
     Process a single c3d file and return a DataFrame.
@@ -203,34 +115,39 @@ def process_c3d(
         c3d_contents (c3d): The c3d object containing the data.
         filename (str): The filename of the c3d file.
         activity_categories (list[str]): A list of activity categories to search for.
-        imu_label_exists (bool): Flag if IMU data has location labels.
         trial_count (int): The current trial count.
+        missing_label (str | None): Body location label to use for any unlabelled data.
 
     Returns:
         pl.DataFrame | None: The processed data or None if no data found.
     """
-
     analogs = c3d_contents["data"]["analogs"]
     df = pl.DataFrame(analogs[0].T)
 
     if df.is_empty():
         return
 
-    df.columns = _find_column_names(c3d_contents)
-    if imu_label_exists:
-        placement_labels = ["foot", "shank", "thigh", "pelvis"]
-        filtered_columns = [col for col in df.columns if any(label in col.lower() for label in placement_labels)]
-        df = df.select(filtered_columns)
-    else:
-        to_remove = [
-            "Force",
-            "Moment",
-            "Velocity",
-            "Angle.Pitch",
-            "Length.Sway",
-        ]
-        columns_to_remove = [col for col in df.columns if any(sub in col for sub in to_remove)]
-        df = df.drop(columns_to_remove)
+    columns = c3d_contents["parameters"]["ANALOG"]["LABELS"]["value"]
+    columns = [column.lower() for column in columns]
+
+    if missing_label:
+        measures = ["global angle", "highg", "accel", "gyro", "mag"]
+        new_columns = []
+        for col in columns:
+            for measure in measures:
+                if col.startswith(measure + "."):
+                    # Add the location label
+                    dimension = col[len(measure) :]  # Keep the dimension
+                    col = f"{measure}_{missing_label}{dimension}"
+            new_columns.append(col)
+        columns = new_columns
+
+    df.columns = columns
+
+    placement_labels = ["foot", "shank", "thigh", "pelvis"]
+    filtered_columns = [col for col in df.columns if any(label in col.lower() for label in placement_labels)]
+
+    df = df.select(filtered_columns)
 
     # Add 'ACTIVITY', 'INCLINE', 'SPEED', 'TIME' and 'TRIAL' columns
     df = df.with_columns(pl.lit(_find_activity_category(filename, activity_categories)).alias("ACTIVITY"))
@@ -238,90 +155,115 @@ def process_c3d(
     df = df.with_columns(
         ACTIVITY=pl.when(pl.col("ACTIVITY") == "jog").then(pl.lit("run")).otherwise(pl.col("ACTIVITY"))
     )
+    # Replace 'l_shank' with 'shank_l' in column names
+    df = df.rename({col: col.replace("_l_shank", "_shank_l") for col in df.columns})
+
+    # Replace any double underscores with singles in column names
+    df = df.rename({col: col.replace("__", "_") for col in df.columns})
+
     df = df.with_columns(pl.lit(_find_incline(filename)).cast(pl.Int16).alias("INCLINE"))
     df = df.with_columns(pl.lit(_find_speed(filename)).cast(pl.Float32).alias("SPEED"))
     df = _add_time_column(c3d_contents, df)
     df = df.with_columns(pl.lit(trial_count).cast(pl.Int16).alias("TRIAL"))
 
-    # df = _cartesian_to_spherical(df)
-
     return df
 
 
-def process_files(input_path: Path, imu_label_exists: bool = False) -> pl.DataFrame:
+def process_files(input_path: Path, missing_labels: dict, skip_participants: list) -> pl.LazyFrame:
     """
-    Process c3d files in the given directory and return a single DataFrame.
+    Process c3d files in the given directory and return a single LazyFrame.
 
     Args:
         input_path (Path): Path to the directory containing the data.
-        imu_label_exists (bool): Flag if IMU data has location labels. Default False.
+        missing_labels (dict): If any body location labels are missing in the data, specify them here.
+        skip_participants (list): Participant numbers to skip.
 
     Returns:
-        pl.DataFrame: The processed data.
+        pl.LazyFrame: The processed data.
     """
+    # Activity verbs to search for in the filenames
     activity_categories = ["walk", "jog", "run", "jump"]
 
     total_df = None
     trial_count = 0
 
-    for filename in tqdm(os.listdir(input_path)):
-        # Ignore any non-c3d files, transition files or files that don't start with the activity categories,
-        # i.e. calibration files
-        if (
-            filename.endswith(".c3d")
-            and any(activity in filename.lower() for activity in activity_categories)
-            and "transition" not in filename.lower()
-        ):
-            logger.info(f"Processing file: {filename}")
-            file = os.path.join(input_path, filename)
+    # Process participants in order
+    participants = sorted(os.listdir(input_path), key=lambda x: int(x.split("_")[0][1:]))
 
-            c3d_contents = c3d(file)
+    for participant in tqdm(participants, desc="Participants"):
+        participant_number = int(participant.split("_")[0][1:])
 
-            df = process_c3d(
-                c3d_contents,
-                filename,
-                activity_categories,
-                imu_label_exists,
-                trial_count,
-            )
-            if df is None:
-                logger.warning(f"Skipping empty file: {filename}")
-                continue
+        # Skip certain participants
+        if participant_number in skip_participants:
+            logger.info(f"Skipping participant: {participant}")
+            continue
 
-            trial_count += 1
+        logger.info(f"Processing participant: {participant}")
+        participant_path = os.path.join(input_path, participant)
 
-            # Check for columns in df that are not in total_df
-            if total_df is not None:
-                df_columns = set(df.columns)
-                total_df_columns = set(total_df.columns)
-                extra_columns = df_columns - total_df_columns
-                if extra_columns:
-                    logger.warn(f"The following columns in df are not in total_df: {extra_columns}")
+        missing_label = missing_labels.get(participant_number)
 
-            total_df = df if total_df is None else total_df.vstack(df.select(total_df.columns))
+        for filename in tqdm(os.listdir(participant_path), desc=f"Files in {participant}", leave=False):
+            # Ignore any non-c3d files, transition files or files that don't start with the activity categories,
+            # i.e. calibration files
+            if (
+                filename.endswith(".c3d")
+                and any(activity in filename.lower() for activity in activity_categories)
+                and "transition" not in filename.lower()
+            ):
+                # logger.info(f"Processing file: {filename}")
+                file = os.path.join(participant_path, filename)
 
-    return total_df
+                c3d_contents = c3d(file)
+
+                df = process_c3d(
+                    c3d_contents,
+                    filename,
+                    activity_categories,
+                    trial_count,
+                    missing_label,
+                )
+                if df is None:
+                    logger.warning(f"Skipping empty file: {filename}")
+                    continue
+
+                trial_count += 1
+
+                # Check for columns in df that are not in total_df
+                if total_df is not None:
+                    df_columns = set(df.columns)
+                    total_df_columns = set(total_df.columns)
+                    extra_columns = df_columns - total_df_columns
+                    if extra_columns:
+                        logger.warning(f"The following columns in df are not in total_df: {extra_columns}")
+
+                total_df = df if total_df is None else total_df.vstack(df.select(total_df.columns))
+        logger.info(f"Processed participant: {participant}")
+
+    return total_df.lazy()
 
 
 @app.command()
 def main(
-    input_path: Path = LABELLED_TEST_DATA_DIR,
-    output_path: Path = INTERIM_DATA_DIR / "labelled_test_data.csv",
-    imu_label_exists: bool = typer.Option(False, help="Flag if IMU data has location labels"),
+    input_path: Path = MAIN_DATA_DIR,
+    output_path: Path = INTERIM_DATA_DIR / "main_test_data.parquet",
+    missing_labels: dict = {2: "thigh_l", 6: "pelvis", 7: "pelvis", 16: "thigh_l"},
+    skip_participants: list = [],
 ):
     """
-    Process pilot data and save to CSV.
+    Process pilot data and save to parquet.
     Combines all c3d files into one dataset.
 
     Args:
         input_path (Path): Path to the directory containing the pilot data.
         output_path (Path): Path to save the processed data to.
-        imu_label_exists (bool): Flag if IMU data has location labels. Default False.
+        missing_labels (dict): If any body location labels are missing in the data, specify them here.
+        skip_participants (list): Participant numbers to skip.
     """
 
-    data = process_files(input_path, imu_label_exists)
+    data = process_files(input_path, missing_labels, skip_participants)
 
-    data.write_csv(output_path)
+    data.sink_parquet(output_path)
     logger.success(f"Output saved to: {output_path}")
 
 
