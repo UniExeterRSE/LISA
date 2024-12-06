@@ -2,7 +2,11 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from lisa.features import sequential_stratified_split, sliding_window
+from lisa.features import (
+    check_split_balance,
+    sequential_stratified_split,
+    sliding_window,
+)
 
 
 @pytest.fixture
@@ -205,3 +209,30 @@ def test_sliding_window_time_reset_error() -> None:
     with pytest.raises(ValueError):
         sliding_window(df, period=3)
         sliding_window(df, period=3)
+
+
+def test_check_split_balance():
+    """
+    Test check_split_balance function
+    """
+    # Create sample data
+    df1 = pl.LazyFrame({"ACTIVITY": ["walk", "walk", "run", "run"]})
+    df2 = pl.LazyFrame({"ACTIVITY": ["walk", "walk", "walk", "run", "run", "run"]})
+
+    assert check_split_balance(df1, df2).is_empty()
+
+    df3 = pl.LazyFrame({"ACTIVITY": ["walk", "walk", "walk", "run"]})
+
+    expected_difference = pl.DataFrame(
+        {
+            "ACTIVITY": ["run", "walk"],
+            "proportion": [0.25, 0.75],
+            "proportion_test": [0.5, 0.5],
+            "diff": [0.25, 0.25],
+        }
+    )
+
+    assert_frame_equal(
+        check_split_balance(df1, df3),
+        expected_difference,
+    )

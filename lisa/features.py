@@ -100,47 +100,58 @@ def sequential_stratified_split(
 
 
 def check_split_balance(
-    y_test: pl.DataFrame,
-    y_train: pl.DataFrame,
+    y_test: pl.LazyFrame,
+    y_train: pl.LazyFrame,
     threshold: float = 0.05,
 ) -> pl.DataFrame:
     """
     Helper function to check that the spread of values in the test and train sets are roughly similar.
 
     Args:
-        y_test (pl.DataFrame): The test set
-        y_train (pl.DataFrame): The train set
+        y_test (pl.LazyFrame): The test set
+        y_train (pl.LazyFrame): The train set
         tolerance (float, optional): The threshold for the difference between the two proportions, between 0 and 1.
             Defaults to 0.05.
 
     Returns:
         pl.DataFrame: A DataFrame containing the values that exceed the threshold, if any.
     """
-    if y_test.columns != y_train.columns:
-        raise ValueError("The DataFrames must have the same columns")
-    feature_name = y_test.columns[0]
+    if y_test.collect_schema() != y_train.collect_schema():
+        raise ValueError("The DataFrames must have the same schema")
+    feature_name = y_test.collect_schema().names()[0]
 
     # Calculate the proportion of each value in the test and train sets
-    train_proportions = y_train.to_series().value_counts(sort=True, normalize=True)
-    test_proportions = y_test.to_series().value_counts(sort=True, normalize=True)
+    train_proportions = (
+        y_train.group_by(feature_name)
+        .agg(pl.count().alias("count"))
+        .with_columns((pl.col("count") / pl.col("count").sum()).alias("proportion"))
+        .drop("count")
+    )
 
-    # Join the two DataFrames on the common column
+    test_proportions = (
+        y_test.group_by(feature_name)
+        .agg(pl.count().alias("count"))
+        .with_columns((pl.col("count") / pl.col("count").sum()).alias("proportion_test"))
+        .drop("count")
+    )
+
+    # Join the two LazyFrames on the common column
     df_merged = train_proportions.join(test_proportions, on=feature_name, how="inner", suffix="_test")
 
     # Calculate the absolute difference between the 'proportion' columns
     df_diff = df_merged.with_columns((pl.col("proportion") - pl.col("proportion_test")).abs().alias("diff"))
 
     # Filter rows where the difference exceeds the threshold
-    return df_diff.filter(pl.col("diff") > threshold)
+    return df_diff.filter(pl.col("diff") > threshold).collect()
 
 
-def standard_scaler(X_train: pl.DataFrame, X_test: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, StandardScaler]:
+def standard_scaler(X_train: pl.LazyFrame, X_test: pl.LazyFrame) -> tuple[pl.DataFrame, pl.DataFrame, StandardScaler]:
     """
     Standardizes the input data.
 
     Args:
-        X_train (pl.DataFrame): The training data to be standardised.
-        X_test (pl.DataFrame): The test data to be standardised.
+        X_train (pl.LazyFrame): The training data to be standardised.
+        X_test (pl.LazyFrame): The test data to be standardised.
 
     Returns:
         tuple[pl.DataFrame, pl.DataFrame, StandardScaler]: The standardised training and test data, and scaler.
@@ -148,17 +159,37 @@ def standard_scaler(X_train: pl.DataFrame, X_test: pl.DataFrame) -> tuple[pl.Dat
     # TODO running out of memory here
     scaler = StandardScaler()
 
-    # Collect and transform X_train lazily
-    X_train_collected = X_train.collect()
-    X_train_scaled = scaler.fit_transform(X_train_collected.to_numpy())
-    X_train_scaled_lf = pl.LazyFrame(pl.from_numpy(X_train_scaled, schema=X_train_collected.schema))
+    # parts = _split_into_parts(X_train, 3)
+    # logger.info("Split.")
+    # for data in parts:
+    #     scaler.partial_fit(data)
 
-    # Collect and transform X_test lazily
-    X_test_collected = X_test.collect()
-    X_test_scaled = scaler.transform(X_test_collected.to_numpy())
-    X_test_scaled_lf = pl.LazyFrame(pl.from_numpy(X_test_scaled, schema=X_test_collected.schema))
+    #     # View the updated mean and std variance at each batch
+    #     print(scaler.mean_)
+    #     print(scaler.std_)
 
-    return X_train_scaled_lf, X_test_scaled_lf, scaler
+    X_train_scaled = scaler.fit_transform(X_train.collect())
+    X_test_scaled = scaler.transform(X_test.collect())
+
+    X_train = pl.from_numpy(X_train_scaled, schema=X_train.collect_schema())
+    X_test = pl.from_numpy(X_test_scaled, schema=X_test.collect_schema())
+
+    return X_train, X_test, scaler
+
+
+def _split_into_parts(df: pl.DataFrame, n_parts: int) -> list[pl.DataFrame]:
+    "Split df into n_parts parts."
+    # total_rows = len(df)
+    total_rows = 21_863_399
+    part_size = total_rows // n_parts
+    parts = [df[i * part_size : (i + 1) * part_size] for i in range(n_parts)]
+
+    # Add any remaining rows to the last part
+    remainder = total_rows % n_parts
+    if remainder > 0:
+        parts[-1] = pl.concat([parts[-1], df[-remainder:]])
+
+    return parts
 
 
 def sliding_window(
@@ -183,19 +214,6 @@ def sliding_window(
         chunk_size (int): The number of rows to process in each chunk. If memory issues are occurring, decrease.
             Default is 100_000.
     """
-
-    def _split_into_parts(df: pl.DataFrame, n_parts: int) -> list[pl.DataFrame]:
-        "Split df into n_parts parts."
-        total_rows = len(df)
-        part_size = total_rows // n_parts
-        parts = [df[i * part_size : (i + 1) * part_size] for i in range(n_parts)]
-
-        # Add any remaining rows to the last part
-        remainder = total_rows % n_parts
-        if remainder > 0:
-            parts[-1] = pl.concat([parts[-1], df[-remainder:]])
-
-        return parts
 
     def _process_chunk(chunk: pl.DataFrame, columns_to_aggregate: list[str]) -> pl.DataFrame:
         "Apply rolling aggregation to a single chunk."
