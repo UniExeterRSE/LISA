@@ -60,7 +60,7 @@ def sequential_stratified_split(
 
         # Determine split indices
         train_split = int(train_size * n_rows)
-        test_split = train_split + gap
+        test_split = int(train_split + gap)
 
         # Get trial values lazily
         trial_values = feature_lf.select("TRIAL").collect().to_series()
@@ -68,8 +68,8 @@ def sequential_stratified_split(
         # Adjust train_split to avoid trial overlap
         for index in range(train_split, n_rows):
             if trial_values[index] != trial_values[train_split]:
-                train_split = index
-                test_split = train_split + gap
+                train_split = int(index)
+                test_split = int(train_split + gap)
                 break
 
         # Extract train and test splits lazily
@@ -167,51 +167,52 @@ def standard_scaler(X_train: pl.LazyFrame, X_test: pl.LazyFrame) -> tuple[pl.Dat
     return X_train, X_test, scaler
 
 
-def chunk_lazyframe(
-    lf: pl.LazyFrame, chunk_size: int = 10_000, len_upper_bound: int = 25_000_000
-) -> list[pl.LazyFrame]:
-    """
-    Split a LazyFrame into chunks to decrease memory use when processing.
+def _split_into_parts(df: pl.DataFrame, n_parts: int, total_rows: int | None) -> list[pl.DataFrame]:
+    "Split df into n_parts parts."
 
-    Args:
-        lf (pl.LazyFrame): The input LazyFrame to be split.
-        chunk_size (int): The number of rows to process in each chunk. Default is 10_000.
-        len_upper_bound (int): The maximum number of rows in the LazyFrame. If the input contains fewer rows,
-            the remaining chunks will just be empty. Default is 25_000_000.
+    if total_rows is None:
+        total_rows = len(df)
 
-    Returns:
-        list: A list of LazyFrames, each containing a chunk of the input data.
-    """
+    part_size = total_rows // n_parts
+    parts = [df[i * part_size : (i + 1) * part_size] for i in range(n_parts)]
 
-    return [
-        lf.with_row_index("id").filter((pl.col("id") >= i) & (pl.col("id") < i + chunk_size)).drop("id")
-        for i in range(0, len_upper_bound, chunk_size)
-    ]
+    # Add any remaining rows to the last part
+    remainder = total_rows % n_parts
+    if remainder > 0:
+        parts[-1] = pl.concat([parts[-1], df[-remainder:]])
+
+    return parts
 
 
 def sliding_window(
     df: pl.DataFrame,
     output_path: Path,
     period: int = 300,
+    total_rows: int | None = None,
+    n_parts: int = 3,
     chunk_size: int = 100_000,
 ):
     """
     Apply sliding window aggregation on a DataFrame.
     Extracts max, min, mean and std for each signal and saves the result to a Parquet file.
 
-    To decrease memory use, the data is split into chunks of 'chunk_size' rows and recombined at the end.
+    To decrease memory use, the data is split into 'n_parts' parts, each being processed in chunks of 'chunk_size' rows.
 
     Args:
         df (polars.DataFrame): The input DataFrame.
         output_path (Path): The output path to save the Parquet file.
         period (int): The window size in number of rows. Default is 300.
+        total_rows (int): The total number of rows in the input data. If known, this can be provided to improve
+            performance. Default is None.
+        n_parts (int): The number of parts to split the DataFrame into. If memory issues are occurring, increase.
+            Default is 3.
         chunk_size (int): The number of rows to process in each chunk. If memory issues are occurring, decrease.
             Default is 100_000.
     """
 
-    def _process_chunk(chunk: pl.LazyFrame, columns_to_aggregate: list[str]) -> pl.DataFrame:
+    def _process_chunk(chunk: pl.DataFrame, columns_to_aggregate: list[str]) -> pl.DataFrame:
         "Apply rolling aggregation to a single chunk."
-        rolling = chunk.rolling(index_column="TIME", period=f"{period}i", group_by="TRIAL")
+        rolling = chunk.lazy().rolling(index_column="TIME", period=f"{period}i", group_by="TRIAL")
 
         aggregations = []
         for col in columns_to_aggregate:
@@ -241,62 +242,78 @@ def sliding_window(
     # Get the list of columns to aggregate
     columns_to_aggregate = [col for col in df.collect_schema().names() if col not in exclude_columns]
 
-    row_chunks = chunk_lazyframe(df, chunk_size=chunk_size)
+    parts = _split_into_parts(df, n_parts, total_rows)
 
-    for chunk_index, chunk in enumerate(row_chunks):
-        logger.info(f"Processing chunk {chunk_index + 1}/{len(row_chunks)}...")
-        # Process chunk
-        result_chunk = _process_chunk(chunk, columns_to_aggregate)
+    for part_index, part in enumerate(parts):
+        logger.info(f"Processing part {part_index + 1} of {n_parts}...")
 
-        # Check if TIME resets to 0 when TRIAL increases by 1
-        trial_check = result_chunk.with_columns((pl.col("TRIAL") - pl.col("TRIAL").shift(1)).alias("TRIAL_INCREASE"))
-        time_resets_correctly = trial_check.filter(pl.col("TRIAL_INCREASE") == 1)["TIME"].to_list() == [0] * len(
-            trial_check.filter(pl.col("TRIAL_INCREASE") == 1)
-        )
+        # Split part into row chunks
+        row_chunks = [part[i : i + chunk_size] for i in range(0, len(part), chunk_size)]
 
-        # Remove rows before first 'full' window
-        if time_resets_correctly:
-            result_chunk = result_chunk.filter(pl.col("TIME") > period - 2)
-        else:
-            raise ValueError(
-                "Time does not reset to 0 when TRIAL increases by 1. " "Unable to remove rows before first full window."
+        for chunk_index, chunk in enumerate(row_chunks):
+            logger.info(f"Processing chunk {chunk_index + 1}/{len(row_chunks)} of part {part_index + 1}...")
+            # Process chunk
+            result_chunk = _process_chunk(chunk, columns_to_aggregate)
+
+            # Check if TIME resets to 0 when TRIAL increases by 1
+            trial_check = result_chunk.with_columns(
+                (pl.col("TRIAL") - pl.col("TRIAL").shift(1)).alias("TRIAL_INCREASE")
+            )
+            time_resets_correctly = trial_check.filter(pl.col("TRIAL_INCREASE") == 1)["TIME"].to_list() == [0] * len(
+                trial_check.filter(pl.col("TRIAL_INCREASE") == 1)
             )
 
-        # Add the categorical columns back in by matching TRIAL
-        def _add_columns_back(result: pl.DataFrame, df: pl.DataFrame, columns: list[str]) -> pl.DataFrame:
-            for column in columns:
-                column_map = dict(zip(df["TRIAL"], df[column], strict=True))
-                result = result.with_columns(pl.col("TRIAL").replace_strict(column_map).alias(column))
-            return result
+            # Remove rows before first 'full' window
+            if time_resets_correctly:
+                result_chunk = result_chunk.filter(pl.col("TIME") > period - 2)
+            else:
+                raise ValueError(
+                    "Time does not reset to 0 when TRIAL increases by 1. "
+                    "Unable to remove rows before first full window."
+                )
 
-        result_chunk = _add_columns_back(result_chunk, df, categorical_columns)
+            # Add the categorical columns back in by matching TRIAL
+            def _add_columns_back(result, df, columns):
+                for column in columns:
+                    column_map = dict(zip(df["TRIAL"], df[column], strict=True))
+                    result = result.with_columns(pl.col("TRIAL").replace_strict(column_map).alias(column))
+                return result
 
-        if not result_chunk.collect_schema().names() == validation_schema:
-            raise ValueError("Schema validation failed.")
+            result_chunk = _add_columns_back(result_chunk, df, categorical_columns)
 
-        # Convert DataFrame to PyArrow Table
-        arrow_table = result_chunk.to_arrow()
+            # Validate the schema
+            result_schema = result_chunk.collect_schema().names()
+            missing_in_result = set(validation_schema) - set(result_schema)
+            extra_in_result = set(result_schema) - set(validation_schema)
+            if missing_in_result or extra_in_result:
+                print("Columns missing:", missing_in_result)
+                print("Extra columns:", extra_in_result)
+                raise ValueError("Schema validation failed.")
 
-        # Validate the Arrow table
-        try:
-            arrow_table.validate(full=True)
-        except pa.lib.ArrowInvalid as e:
-            logger.error(f"Arrow table validation failed: {e}")
-            raise
+            # Convert DataFrame to PyArrow Table
+            arrow_table = result_chunk.to_arrow()
 
-        # Write the Arrow table to Parquet
-        if chunk_index == 0:  # First chunk: initialize ParquetWriter
-            writer = pq.ParquetWriter(output_path, arrow_table.schema)
-        writer.write_table(arrow_table)
+            # Validate the Arrow table
+            try:
+                arrow_table.validate(full=True)
+            except pa.lib.ArrowInvalid as e:
+                logger.error(f"Arrow table validation failed: {e}")
+                raise
+
+            # Write the Arrow table to Parquet
+            if part_index == 0 and chunk_index == 0:  # First chunk: initialize ParquetWriter
+                writer = pq.ParquetWriter(output_path, arrow_table.schema)
+            writer.write_table(arrow_table)
 
     writer.close()
-    logger.success(f"All data processed and saved to {output_path}.")
+    logger.success(f"All {n_parts} parts processed and saved to {output_path}.")
 
 
 @app.command()
 def main(
     input_path: Path = INTERIM_DATA_DIR / "main_test_data.parquet",
     output_path: Path = PROCESSED_DATA_DIR / "mtd2.parquet",
+    total_rows: int | None = None,
 ):
     """
     Run feature extraction on the interim data and save to file.
@@ -306,10 +323,11 @@ def main(
     Args:
         input_path (Path): Path to the directory containing the data from dataset.py.
         output_path (Path): Path to save the processed data to.
+        total_rows (int): The total number of rows in the input data, if it is known.
     """
     df = pl.read_parquet(input_path, low_memory=True, rechunk=True)
 
-    sliding_window(df, output_path, period=300)
+    sliding_window(df, output_path, period=300, total_rows=total_rows)
 
 
 if __name__ == "__main__":
