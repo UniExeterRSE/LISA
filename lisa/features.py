@@ -230,7 +230,7 @@ def sliding_window(
     # Load the schema for validation later
     schema_path = Path(PROJ_ROOT / "lisa" / "validation_schema.json")
     with schema_path.open("r") as f:
-        validation_schema = json.load(f)["columns"]
+        validation_schema = json.load(f)
 
     # List of categorical columns; one per trial
     categorical_columns = ["ACTIVITY", "SPEED", "INCLINE"]
@@ -282,13 +282,17 @@ def sliding_window(
             result_chunk = _add_columns_back(result_chunk, df, categorical_columns)
 
             # Validate the schema
-            result_schema = result_chunk.collect_schema().names()
-            missing_in_result = set(validation_schema) - set(result_schema)
-            extra_in_result = set(result_schema) - set(validation_schema)
-            if missing_in_result or extra_in_result:
-                print("Columns missing:", missing_in_result)
-                print("Extra columns:", extra_in_result)
-                raise ValueError("Schema validation failed.")
+            result_schema = result_chunk.collect_schema()
+            result_schema_dict = dict(
+                zip(
+                    result_schema.names(),
+                    list(map(str, result_schema.dtypes())),
+                    strict=True,
+                )
+            )
+            diff = set(validation_schema.items()) ^ set(result_schema_dict.items())
+            if diff:
+                raise ValueError("Schema validation failed, difference: ", diff)
 
             # Convert DataFrame to PyArrow Table
             arrow_table = result_chunk.to_arrow()
