@@ -4,14 +4,11 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
-import typer
 from ezc3d import c3d
 from loguru import logger
 from tqdm import tqdm
 
 from lisa.config import INTERIM_DATA_DIR, MAIN_DATA_DIR
-
-app = typer.Typer()
 
 
 def _add_time_column(c: c3d, df: pl.DataFrame) -> pl.DataFrame:
@@ -64,17 +61,19 @@ def _find_incline(filename: str) -> int | None:
     Returns:
         int | None: The incline if found, otherwise 0 for locomotion activities or None.
     """
+    filename = filename.lower()
+
     # incline should default to None for jump
-    if "jump" in filename.lower():
+    if "jump" in filename:
         return None
     else:
         incline = 0
-        if "incline" in filename.lower():
-            match = re.search(r"(\d+)\s*incline", filename)
+        if "incline" in filename:
+            match = re.search(r"(\d+)(\s*|\_*)incline", filename)
             if match:
                 incline = int(match.group(1))
-        elif "decline" in filename.lower():
-            match = re.search(r"(\d+)\s*decline", filename)
+        elif "decline" in filename:
+            match = re.search(r"(\d+)(\s*|\_*)decline", filename)
             if match:
                 incline = -int(match.group(1))
 
@@ -243,19 +242,18 @@ def process_files(input_path: Path, missing_labels: dict, skip_participants: lis
     return total_df.lazy()
 
 
-@app.command()
 def main(
     input_path: Path = MAIN_DATA_DIR,
-    output_path: Path = INTERIM_DATA_DIR / "main_test_data.parquet",
+    output_path: Path = INTERIM_DATA_DIR / "P1&P2.parquet",
     missing_labels: dict = {2: "thigh_l", 6: "pelvis", 7: "pelvis", 16: "thigh_l"},
-    skip_participants: list = [],
+    skip_participants: list = list(range(3, 17)),  # noqa: B008
 ):
     """
     Process pilot data and save to parquet.
     Combines all c3d files into one dataset.
 
     Args:
-        input_path (Path): Path to the directory containing the pilot data.
+        input_path (Path): Path to the directory containing the input data.
         output_path (Path): Path to save the processed data to.
         missing_labels (dict): If any body location labels are missing in the data, specify them here.
         skip_participants (list): Participant numbers to skip.
@@ -268,4 +266,4 @@ def main(
 
 
 if __name__ == "__main__":
-    app()
+    main()
