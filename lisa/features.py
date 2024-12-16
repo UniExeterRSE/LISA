@@ -7,6 +7,7 @@ import pyarrow.parquet as pq
 import typer
 from loguru import logger
 from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
 
 from lisa.config import INTERIM_DATA_DIR, PROCESSED_DATA_DIR, PROJ_ROOT
 
@@ -244,13 +245,13 @@ def sliding_window(
 
     parts = _split_into_parts(df, n_parts, total_rows)
 
-    for part_index, part in enumerate(parts):
+    for part_index, part in enumerate(tqdm(parts, desc="processing parts")):
         logger.info(f"Processing part {part_index + 1} of {n_parts}...")
 
         # Split part into row chunks
         row_chunks = [part[i : i + chunk_size] for i in range(0, len(part), chunk_size)]
 
-        for chunk_index, chunk in enumerate(row_chunks):
+        for chunk_index, chunk in enumerate(tqdm(row_chunks, desc="processing chunks")):
             logger.info(f"Processing chunk {chunk_index + 1}/{len(row_chunks)} of part {part_index + 1}...")
             # Process chunk
             result_chunk = _process_chunk(chunk, columns_to_aggregate)
@@ -315,8 +316,8 @@ def sliding_window(
 
 @app.command()
 def main(
-    input_path: Path = INTERIM_DATA_DIR / "main_test_data.parquet",
-    output_path: Path = PROCESSED_DATA_DIR / "mtd2.parquet",
+    input_path: Path = INTERIM_DATA_DIR / "main_data.parquet",
+    output_path: Path = PROCESSED_DATA_DIR / "main_data.parquet",
     total_rows: int | None = None,
 ):
     """
