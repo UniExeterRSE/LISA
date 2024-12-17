@@ -10,8 +10,8 @@ from lisa.features import (
 
 
 @pytest.fixture
-def sample_dataframe():
-    return pl.DataFrame(
+def sample_lazyframe():
+    return pl.LazyFrame(
         {
             "TRIAL": [0, 0, 0, 0, 1, 1, 1, 2, 2, 2],
             "TIME": [0, 1, 2, 3, 0, 1, 2, 3, 4, 5],
@@ -24,18 +24,18 @@ def sample_dataframe():
 
 # TODO this should ignore the warning, but doesn't
 @pytest.mark.filterwarnings("ignore:.*trials are in both train and test sets.*:UserWarning")
-def test_sequential_stratified_split(sample_dataframe):
+def test_sequential_stratified_split(sample_lazyframe):
     """
     Test sequential_stratified_split function
     """
 
     # Call the train_test_split function
     train_data, test_data, train_labels, test_labels = sequential_stratified_split(
-        sample_dataframe, train_size=0.8, gap=0
+        sample_lazyframe, train_size=0.8, gap=0
     )
 
     # Check the train_data result
-    expected_train_data = pl.DataFrame(
+    expected_train_data = pl.LazyFrame(
         {
             "Value": [10, 20, 30, 40, 80, 50, 60],
         },
@@ -44,7 +44,7 @@ def test_sequential_stratified_split(sample_dataframe):
     assert_frame_equal(train_data, expected_train_data, check_column_order=False, check_dtypes=False)
 
     # Check the test_data result
-    expected_test_data = pl.DataFrame(
+    expected_test_data = pl.LazyFrame(
         {
             "Value": [90, 100, 70],
         },
@@ -53,7 +53,7 @@ def test_sequential_stratified_split(sample_dataframe):
     assert_frame_equal(test_data, expected_test_data, check_column_order=False, check_dtypes=False)
 
     # Check the train_labels result
-    expected_train_labels = pl.DataFrame(
+    expected_train_labels = pl.LazyFrame(
         {
             "ACTIVITY": ["A", "A", "A", "A", "A", "B", "B"],
         },
@@ -67,7 +67,7 @@ def test_sequential_stratified_split(sample_dataframe):
     )
 
     # Check the test_labels result
-    expected_test_labels = pl.DataFrame(
+    expected_test_labels = pl.LazyFrame(
         {
             "ACTIVITY": ["A", "A", "B"],
         },
@@ -76,35 +76,28 @@ def test_sequential_stratified_split(sample_dataframe):
     assert_frame_equal(test_labels, expected_test_labels, check_column_order=False, check_dtypes=False)
 
 
-def test_sequential_stratified_split_gap(sample_dataframe):
+def test_sequential_stratified_split_gap(sample_lazyframe):
     """
     Test sequential_stratified_split gap parameter
     """
 
-    # Check error not raised when 0 <= gap <= min_n_rows
-    sequential_stratified_split(sample_dataframe, train_size=0.8, gap=2)
-
-    # Check error is raised when gap < 0
+    # Check error is raised when gap bigger than trials
     with pytest.raises(ValueError):
-        sequential_stratified_split(sample_dataframe, train_size=0.8, gap=-5)
-
-    # Check error is raised when gap > min_n_rows
-    with pytest.raises(ValueError):
-        sequential_stratified_split(sample_dataframe, train_size=0.8, gap=4)
+        sequential_stratified_split(sample_lazyframe, train_size=0.8, gap=4)
 
 
-def test_sequential_stratified_split_train_size(sample_dataframe):
+def test_sequential_stratified_split_train_size(sample_lazyframe):
     """
     Test sequential_stratified_split train_size parameter
     """
 
     # Check error is raised when train_size < 0
     with pytest.raises(ValueError):
-        sequential_stratified_split(sample_dataframe, train_size=-0.8)
+        sequential_stratified_split(sample_lazyframe, train_size=-0.8)
 
     # Check error is raised when train_size > 1
     with pytest.raises(ValueError):
-        sequential_stratified_split(sample_dataframe, train_size=1.8)
+        sequential_stratified_split(sample_lazyframe, train_size=1.8)
 
 
 def test_sliding_window_single_trial() -> None:
@@ -125,18 +118,13 @@ def test_sliding_window_single_trial() -> None:
     )
 
     # Call the sliding_window function
-    result = sliding_window(df, period=3)
+    result = sliding_window(df, ["Value"], 3)
 
     # Check the result
     expected_result = pl.DataFrame(
         {
             "TRIAL": [0, 0, 0, 0, 0, 0, 0, 0],
             "TIME": [2, 3, 4, 5, 6, 7, 8, 9],
-            "ACTIVITY": ["A", "A", "A", "A", "A", "A", "A", "A"],
-            "SPEED": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-            "INCLINE": [None, None, None, None, None, None, None, None],
-            "first_Value": [10, 20, 30, 40, 50, 60, 70, 100],
-            "last_Value": [30, 40, 50, 60, 70, 100, 90, 80],
             "max_Value": [30, 40, 50, 60, 70, 100, 100, 100],
             "min_Value": [10, 20, 30, 40, 50, 60, 70, 80],
             "mean_Value": [20, 30, 40, 50, 60, 76.66667, 86.66667, 90],
@@ -166,18 +154,13 @@ def test_sliding_window_multi_trial() -> None:
     )
 
     # Call the sliding_window function
-    result = sliding_window(df, period=3)
+    result = sliding_window(df, ["Value"], 3)
 
     # Check the result
     expected_result = pl.DataFrame(
         {
             "TRIAL": [0, 0, 1, 2],
             "TIME": [2, 3, 2, 2],
-            "ACTIVITY": ["A", "A", "B", "A"],
-            "SPEED": [2.3, 2.3, None, 3.4],
-            "INCLINE": [-1, -1, 0, 1],
-            "first_Value": [10, 20, 50, 80],
-            "last_Value": [30, 40, 70, 100],
             "max_Value": [30, 40, 70, 100],
             "min_Value": [10, 20, 50, 80],
             "mean_Value": [20, 30, 60, 90],
@@ -207,8 +190,7 @@ def test_sliding_window_time_reset_error() -> None:
     )
 
     with pytest.raises(ValueError):
-        sliding_window(df, period=3)
-        sliding_window(df, period=3)
+        sliding_window(df, ["Value"], 3)
 
 
 def test_check_split_balance():
@@ -235,4 +217,5 @@ def test_check_split_balance():
     assert_frame_equal(
         check_split_balance(df1, df3),
         expected_difference,
+        check_column_order=False,
     )

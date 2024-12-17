@@ -32,18 +32,17 @@ def test_process_c3d() -> None:
 
     filename = "Jogging2_5ms_weighted_10 decline"
     activity_categories = ["walk", "jog", "run", "jump"]
-    imu_label_exists = True
     trial_count = 0
 
     # Call the process_c3d function
-    result = process_c3d(c3d_contents, filename, activity_categories, imu_label_exists, trial_count)
+    result = process_c3d(c3d_contents, filename, activity_categories, trial_count, None)
 
     # Check the result
     expected_result = pl.DataFrame(
         {
-            "Global Angle_Foot_L.x": [1, 2, 3],
-            "Global Angle_Foot_L.y": [4, 5, 6],
-            "Global Angle_Foot_L.z": [7, 8, 9],
+            "global angle_foot_l.x": [1, 2, 3],
+            "global angle_foot_l.y": [4, 5, 6],
+            "global angle_foot_l.z": [7, 8, 9],
             "ACTIVITY": ["run", "run", "run"],
             "INCLINE": [-10, -10, -10],
             "SPEED": [2.5, 2.5, 2.5],

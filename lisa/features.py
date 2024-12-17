@@ -53,11 +53,11 @@ def sequential_stratified_split(
     # Collect unique feature combinations lazily
     unique_features = lf.select(pl.col(combined_feat_name)).unique(maintain_order=True)
 
-    def process_feature(feature: str) -> tuple[pl.LazyFrame, pl.LazyFrame]:
+    def _process_feature(feature: str) -> tuple[pl.LazyFrame, pl.LazyFrame]:
         feature_lf = lf.filter(pl.col(combined_feat_name) == feature)
 
         # Get number of rows for the feature group
-        n_rows = feature_lf.select(pl.count()).collect().item()
+        n_rows = feature_lf.select(pl.len()).collect().item()
 
         # Determine split indices
         train_split = int(train_size * n_rows)
@@ -81,7 +81,7 @@ def sequential_stratified_split(
 
     train_lfs, test_lfs = [], []
     for feature in unique_features.collect().to_series():
-        train_lf, test_lf = process_feature(feature)
+        train_lf, test_lf = _process_feature(feature)
         train_lfs.append(train_lf)
         test_lfs.append(test_lf)
 
@@ -124,14 +124,14 @@ def check_split_balance(
     # Calculate the proportion of each value in the test and train sets
     train_proportions = (
         y_train.group_by(feature_name)
-        .agg(pl.count().alias("count"))
+        .agg(pl.len().alias("count"))
         .with_columns((pl.col("count") / pl.col("count").sum()).alias("proportion"))
         .drop("count")
     )
 
     test_proportions = (
         y_test.group_by(feature_name)
-        .agg(pl.count().alias("count"))
+        .agg(pl.len().alias("count"))
         .with_columns((pl.col("count") / pl.col("count").sum()).alias("proportion_test"))
         .drop("count")
     )
@@ -170,15 +170,69 @@ def standard_scaler(X_train: pl.LazyFrame, X_test: pl.LazyFrame) -> tuple[pl.Dat
 
 def sliding_window(
     df: pl.DataFrame,
+    agg_columns: list[str],
+    period: int,
+) -> pl.DataFrame:
+    """
+    Apply sliding window aggregation on a DataFrame.
+    Extracts max, min, mean and std for each signal. Removes rows before the first full window.
+
+    Args:
+        df (pl.DataFrame): The input DataFrame.
+        agg_columns (list[str]): The columns names to apply aggregation.
+        period (int): The window size in number of rows.
+
+    Returns:
+        pl.DataFrame: The processed DataFrame.
+    """
+
+    def _rolling_agg(chunk: pl.DataFrame, columns_to_aggregate: list[str], period: int) -> pl.DataFrame:
+        "Apply rolling aggregation to a single chunk."
+        rolling = chunk.lazy().rolling(index_column="TIME", period=f"{period}i", group_by="TRIAL")
+
+        aggregations = []
+        for col in columns_to_aggregate:
+            aggregations.extend(
+                [
+                    pl.max(col).alias(f"max_{col}"),
+                    pl.min(col).alias(f"min_{col}"),
+                    pl.mean(col).alias(f"mean_{col}"),
+                    pl.std(col).alias(f"std_{col}"),
+                ]
+            )
+
+        return rolling.agg(aggregations).collect()
+
+    # Apply rolling aggregation
+    result_chunk = _rolling_agg(df, agg_columns, period)
+
+    # Check if TIME resets to 0 when TRIAL increases by 1
+    trial_check = result_chunk.with_columns((pl.col("TRIAL") - pl.col("TRIAL").shift(1)).alias("TRIAL_INCREASE"))
+    time_resets_correctly = trial_check.filter(pl.col("TRIAL_INCREASE") == 1)["TIME"].to_list() == [0] * len(
+        trial_check.filter(pl.col("TRIAL_INCREASE") == 1)
+    )
+
+    # Remove rows before first 'full' window
+    if time_resets_correctly:
+        result_chunk = result_chunk.filter(pl.col("TIME") > period - 2)
+    else:
+        raise ValueError(
+            "Time does not reset to 0 when TRIAL increases by 1. " "Unable to remove rows before first full window."
+        )
+
+    return result_chunk
+
+
+def feature_extraction(
+    df: pl.DataFrame,
     output_path: Path,
     period: int = 300,
 ):
     """
-    Apply sliding window aggregation on a DataFrame.
-    Extracts max, min, mean and std for each signal and saves the result to a Parquet file.
+    Apply sliding window aggregation, validates results and saves to Parquet file.
 
     Args:
-        df (polars.DataFrame): The input DataFrame.
+        df (pl.DataFrame): The input DataFrame.
         output_path (Path): The output path to save the Parquet file.
         period (int): The window size in number of rows. Default is 300.
     """
@@ -197,23 +251,6 @@ def sliding_window(
         # Split the DataFrame based on the trial_chunks
         return [df.filter(pl.col("TRIAL").is_in(trial_chunk)) for trial_chunk in trial_chunks]
 
-    def _process_chunk(chunk: pl.DataFrame, columns_to_aggregate: list[str]) -> pl.DataFrame:
-        "Apply rolling aggregation to a single chunk."
-        rolling = chunk.lazy().rolling(index_column="TIME", period=f"{period}i", group_by="TRIAL")
-
-        aggregations = []
-        for col in columns_to_aggregate:
-            aggregations.extend(
-                [
-                    pl.max(col).alias(f"max_{col}"),
-                    pl.min(col).alias(f"min_{col}"),
-                    pl.mean(col).alias(f"mean_{col}"),
-                    pl.std(col).alias(f"std_{col}"),
-                ]
-            )
-
-        return rolling.agg(aggregations).collect()
-
     # Load the schema for validation later
     schema_path = Path(PROJ_ROOT / "lisa" / "validation_schema.json")
     with schema_path.open("r") as f:
@@ -231,25 +268,8 @@ def sliding_window(
 
     parts = _split_into_parts(df)
 
-    for index, part in enumerate(tqdm(parts, desc="processing parts")):
-        logger.info(f"Processing part {index + 1} of {len(parts)}...")
-
-        # Process part
-        result_chunk = _process_chunk(part, columns_to_aggregate)
-
-        # Check if TIME resets to 0 when TRIAL increases by 1
-        trial_check = result_chunk.with_columns((pl.col("TRIAL") - pl.col("TRIAL").shift(1)).alias("TRIAL_INCREASE"))
-        time_resets_correctly = trial_check.filter(pl.col("TRIAL_INCREASE") == 1)["TIME"].to_list() == [0] * len(
-            trial_check.filter(pl.col("TRIAL_INCREASE") == 1)
-        )
-
-        # Remove rows before first 'full' window
-        if time_resets_correctly:
-            result_chunk = result_chunk.filter(pl.col("TIME") > period - 2)
-        else:
-            raise ValueError(
-                "Time does not reset to 0 when TRIAL increases by 1. " "Unable to remove rows before first full window."
-            )
+    for index, part in enumerate(tqdm(parts, desc="Processing Trial Groups")):
+        result_chunk = sliding_window(part, columns_to_aggregate, period)
 
         # Add the categorical columns back in by matching TRIAL
         def _add_columns_back(result, df, columns):
@@ -294,8 +314,8 @@ def sliding_window(
 
 @app.command()
 def main(
-    input_path: Path = INTERIM_DATA_DIR / "P1_data.parquet",
-    output_path: Path = PROCESSED_DATA_DIR / "P1.parquet",
+    input_path: Path = INTERIM_DATA_DIR / "main_data.parquet",
+    output_path: Path = PROCESSED_DATA_DIR / "main_data.parquet",
 ):
     """
     Run feature extraction on the interim data and save to file.
@@ -308,7 +328,7 @@ def main(
     """
     df = pl.read_parquet(input_path, low_memory=True, rechunk=True)
 
-    sliding_window(df, output_path, period=300)
+    feature_extraction(df, output_path, period=300)
 
 
 if __name__ == "__main__":

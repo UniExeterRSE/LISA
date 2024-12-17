@@ -189,7 +189,7 @@ def process_files(input_path: Path, missing_labels: dict, skip_participants: lis
     # Process participants in order
     participants = sorted(os.listdir(input_path), key=lambda x: int(x.split("_")[0][1:]))
 
-    for participant in tqdm(participants, desc="Participants"):
+    for participant in tqdm(participants, desc="Processing Participants"):
         participant_number = int(participant.split("_")[0][1:])
 
         # Skip certain participants
@@ -244,9 +244,9 @@ def process_files(input_path: Path, missing_labels: dict, skip_participants: lis
 
 def main(
     input_path: Path = MAIN_DATA_DIR,
-    output_path: Path = INTERIM_DATA_DIR / "P1&P2.parquet",
+    output_path: Path = INTERIM_DATA_DIR / "main_data.parquet",
     missing_labels: dict = {2: "thigh_l", 6: "pelvis", 7: "pelvis", 16: "thigh_l"},
-    skip_participants: list = list(range(3, 17)),  # noqa: B008
+    skip_participants: list = [],  # noqa: B008
 ):
     """
     Process pilot data and save to parquet.
