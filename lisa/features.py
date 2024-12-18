@@ -172,39 +172,52 @@ def sliding_window(
     df: pl.DataFrame,
     agg_columns: list[str],
     period: int,
+    stats: list[str] = ["min", "max", "mean", "std"],
 ) -> pl.DataFrame:
     """
     Apply sliding window aggregation on a DataFrame.
-    Extracts max, min, mean and std for each signal. Removes rows before the first full window.
+    Extracts specified stats for each signal. Removes rows before the first full window.
 
     Args:
         df (pl.DataFrame): The input DataFrame.
         agg_columns (list[str]): The columns names to apply aggregation.
         period (int): The window size in number of rows.
-
+        stats (list[str]): The statistics to calculate for each signal.
+            Options are ['min', 'max', 'mean', 'std', 'first', 'last'].
+            Default is ['min', 'max', 'mean', 'std'].
     Returns:
         pl.DataFrame: The processed DataFrame.
     """
 
-    def _rolling_agg(chunk: pl.DataFrame, columns_to_aggregate: list[str], period: int) -> pl.DataFrame:
+    def _rolling_agg(
+        chunk: pl.DataFrame,
+        columns_to_aggregate: list[str],
+        stats: list[str],
+        period: int,
+    ) -> pl.DataFrame:
         "Apply rolling aggregation to a single chunk."
         rolling = chunk.lazy().rolling(index_column="TIME", period=f"{period}i", group_by="TRIAL")
 
+        # Map of statistic names to Polars functions
+        stat_funcs = {
+            "max": pl.max,
+            "min": pl.min,
+            "mean": pl.mean,
+            "std": pl.std,
+            "first": pl.first,
+            "last": pl.last,
+        }
+
         aggregations = []
         for col in columns_to_aggregate:
-            aggregations.extend(
-                [
-                    pl.max(col).alias(f"max_{col}"),
-                    pl.min(col).alias(f"min_{col}"),
-                    pl.mean(col).alias(f"mean_{col}"),
-                    pl.std(col).alias(f"std_{col}"),
-                ]
-            )
+            for stat in stats:
+                if stat in stat_funcs:
+                    aggregations.append(stat_funcs[stat](col).alias(f"{stat}_{col}"))
 
         return rolling.agg(aggregations).collect()
 
     # Apply rolling aggregation
-    result_chunk = _rolling_agg(df, agg_columns, period)
+    result_chunk = _rolling_agg(df, agg_columns, stats, period)
 
     # Check if TIME resets to 0 when TRIAL increases by 1
     trial_check = result_chunk.with_columns((pl.col("TRIAL") - pl.col("TRIAL").shift(1)).alias("TRIAL_INCREASE"))
@@ -227,6 +240,8 @@ def feature_extraction(
     df: pl.DataFrame,
     output_path: Path,
     period: int = 300,
+    stats: list[str] = ["min", "max", "mean", "std"],
+    validate_schema: bool = True,
 ):
     """
     Apply sliding window aggregation, validates results and saves to Parquet file.
@@ -235,6 +250,10 @@ def feature_extraction(
         df (pl.DataFrame): The input DataFrame.
         output_path (Path): The output path to save the Parquet file.
         period (int): The window size in number of rows. Default is 300.
+        stats (list[str]): The statistics to calculate for each signal.
+            Options are ['min', 'max', 'mean', 'std', 'first', 'last']. Default is ['min', 'max', 'mean', 'std'].
+        validate_schema (bool): Whether to validate the schema of the output DataFrame.
+            Currently only works for 'full' dataset (i.e. all features). Default is True.
     """
 
     def _split_into_parts(df: pl.DataFrame, trials_per_part: int = 5) -> list[pl.DataFrame]:
@@ -252,9 +271,10 @@ def feature_extraction(
         return [df.filter(pl.col("TRIAL").is_in(trial_chunk)) for trial_chunk in trial_chunks]
 
     # Load the schema for validation later
-    schema_path = Path(PROJ_ROOT / "lisa" / "validation_schema.json")
-    with schema_path.open("r") as f:
-        validation_schema = json.load(f)
+    if validate_schema:
+        schema_path = Path(PROJ_ROOT / "lisa" / "validation_schema.json")
+        with schema_path.open("r") as f:
+            validation_schema = json.load(f)
 
     # List of categorical columns; one per trial
     categorical_columns = ["ACTIVITY", "SPEED", "INCLINE"]
@@ -269,7 +289,7 @@ def feature_extraction(
     parts = _split_into_parts(df)
 
     for index, part in enumerate(tqdm(parts, desc="Processing Trial Groups")):
-        result_chunk = sliding_window(part, columns_to_aggregate, period)
+        result_chunk = sliding_window(part, columns_to_aggregate, period, stats)
 
         # Add the categorical columns back in by matching TRIAL
         def _add_columns_back(result, df, columns):
@@ -281,17 +301,18 @@ def feature_extraction(
         result_chunk = _add_columns_back(result_chunk, df, categorical_columns)
 
         # Validate the schema
-        result_schema = result_chunk.collect_schema()
-        result_schema_dict = dict(
-            zip(
-                result_schema.names(),
-                list(map(str, result_schema.dtypes())),
-                strict=True,
+        if validate_schema:
+            result_schema = result_chunk.collect_schema()
+            result_schema_dict = dict(
+                zip(
+                    result_schema.names(),
+                    list(map(str, result_schema.dtypes())),
+                    strict=True,
+                )
             )
-        )
-        diff = set(validation_schema.items()) ^ set(result_schema_dict.items())
-        if diff:
-            raise ValueError("Schema validation failed, difference: ", diff)
+            diff = set(validation_schema.items()) ^ set(result_schema_dict.items())
+            if diff:
+                raise ValueError("Schema validation failed, difference: ", diff)
 
         # Convert DataFrame to PyArrow Table
         arrow_table = result_chunk.to_arrow()
@@ -328,7 +349,7 @@ def main(
     """
     df = pl.read_parquet(input_path, low_memory=True, rechunk=True)
 
-    feature_extraction(df, output_path, period=300)
+    feature_extraction(df, output_path, stats=["min", "max", "mean", "std"], period=300)
 
 
 if __name__ == "__main__":

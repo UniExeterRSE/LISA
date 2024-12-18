@@ -118,7 +118,7 @@ def test_sliding_window_single_trial() -> None:
     )
 
     # Call the sliding_window function
-    result = sliding_window(df, ["Value"], 3)
+    result = sliding_window(df, ["Value"], 3, stats=["max", "min", "mean", "std"])
 
     # Check the result
     expected_result = pl.DataFrame(
@@ -154,7 +154,7 @@ def test_sliding_window_multi_trial() -> None:
     )
 
     # Call the sliding_window function
-    result = sliding_window(df, ["Value"], 3)
+    result = sliding_window(df, ["Value"], 3, stats=["max", "min", "mean", "std"])
 
     # Check the result
     expected_result = pl.DataFrame(
@@ -217,5 +217,5 @@ def test_check_split_balance():
     assert_frame_equal(
         check_split_balance(df1, df3),
         expected_difference,
-        check_column_order=False,
+        check_row_order=False,
     )

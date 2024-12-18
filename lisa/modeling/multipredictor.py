@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from pathlib import Path
 from typing import Literal
@@ -14,11 +15,10 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 
 from lisa import evaluate
-from lisa.config import ARTIFACTS_DIR, INTERIM_DATA_DIR, MLFLOW_URI
+from lisa.config import ARTIFACTS_DIR, MLFLOW_URI, PROCESSED_DATA_DIR
 from lisa.features import (
     check_split_balance,
     sequential_stratified_split,
-    sliding_window,
     standard_scaler,
 )
 from lisa.plots import regression_histogram
@@ -80,6 +80,11 @@ def regressor(
     params = params.copy()
     if model_name != "LR":
         params.setdefault("random_state", 42)
+
+    if model_name == "RF":
+        params.setdefault("n_estimators", 10)
+        params.setdefault("max_depth", 10)
+
     params.setdefault("n_jobs", -1)
 
     models = {
@@ -134,8 +139,8 @@ def _regressor_script(
         tuple[float, Path, Path | None]: The model score, path to the histogram plot,
         and path to the feature importances if it exists.
     """
-    if not check_split_balance(y_train, y_test).is_empty():
-        logger.info(f"{feature_name} unbalance: {check_split_balance(y_train, y_test)}")
+    if not check_split_balance(y_train.lazy(), y_test.lazy()).is_empty():
+        logger.info(f"{feature_name} unbalance: {check_split_balance(y_train.lazy(), y_test.lazy())}")
 
     y_pred, y_score, model = regressor(model_name, X_train, X_test, y_train, y_test, hyperparams)
 
@@ -182,8 +187,8 @@ def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) 
 
 
 def main(
-    data_path: Path = INTERIM_DATA_DIR / "labelled_test_data.csv",
-    model: Literal["LR", "RF", "LGBM"] = "LR",
+    data_path: Path = PROCESSED_DATA_DIR / "P5.parquet",
+    model: Literal["LR", "RF", "LGBM"] = "RF",
     window: int = 300,
     split: float = 0.8,
 ):
@@ -200,28 +205,48 @@ def main(
         split (float): Train-test split. Default 0.8.
     """
     start_time = time.time()
-    input_df = pl.read_csv(data_path)
+
+    input_df = pl.scan_parquet(data_path)
+
+    # Prepare data
+    df = input_df
+    X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
+        df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
+    )
+    logger.info("scaling data...")
+    scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
+    # scaled_X_train, scaled_X_test = X_train, X_test
+    logger.info("data scaled")
 
     mlflow.set_tracking_uri(uri=MLFLOW_URI)
-
-    # Create a new MLflow Experiment
-    mlflow.set_experiment(f"{model} multipredictor test")
-    # Start an MLflow run
-    with mlflow.start_run():
+    mlflow.set_experiment(f"{model} bugfixing")  # Create a new MLflow Experiment
+    with mlflow.start_run(run_name=data_path.stem, log_system_metrics=True):
         # Set a tag that we can use to remind ourselves what this run was for
         mlflow.set_tag("Training Info", f"{model} Multipredictor development")
 
-        # Prepare data
-        df = sliding_window(input_df, period=window, log=True)
-        X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
-            df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
-        )
-        scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
+        # Extract the unique components from the column names to log
+        statistic, measure, location, dimension = set(), set(), set(), set()
+
+        pattern = re.compile(r"^(.*?)_(.*?)_(.*?)\.(.*?)$")
+
+        for key in df.collect_schema().names():
+            match = pattern.match(key)
+            if match:
+                stat, meas, loc, dim = match.groups()
+                statistic.add(stat)
+                measure.add(meas)
+                location.add(loc)
+                dimension.add(dim)
 
         # Log the hyperparameters
-        params = {}
-        params["window"] = window
-        params["split"] = split
+        params = {
+            "window": window,
+            "split": split,
+            "statistic": statistic,
+            "measure": measure,
+            "location": location,
+            "dimension": dimension,
+        }
         mlflow.log_params(params)
 
         hyperparams = {}
@@ -231,7 +256,22 @@ def main(
             if not check_split_balance(y1_train, y1_test).is_empty():
                 logger.info(f"Activity unbalance: {check_split_balance(y1_train, y1_test)}")
 
-            activity_model = classifier(model, scaled_X_train, y1_train.to_numpy().ravel(), hyperparams)
+            # TODO collect all data, for now
+            y1_train = y1_train.collect()
+            y1_test = y1_test.collect()
+            y2_train = y2_train.collect()
+            y2_test = y2_test.collect()
+            y3_train = y3_train.collect()
+            y3_test = y3_test.collect()
+            df = df.collect()
+
+            activity_model = classifier(
+                model,
+                scaled_X_train,
+                y1_train.to_numpy().ravel(),
+                hyperparams,
+            )
+
             y1_score = activity_model.score(scaled_X_test, y1_test)
             mlflow.log_metric("score", y1_score)
 

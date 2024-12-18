@@ -103,7 +103,10 @@ def process_c3d(
     filename: str,
     activity_categories: list[str],
     trial_count: int,
-    missing_label: str | None,
+    missing_location_label: str | None,
+    measures: list[str] = ["global angle", "highg", "accel", "gyro", "mag"],
+    locations: list[str] = ["foot_", "foot sensor", "shank", "thigh", "pelvis"],
+    dimensions: list[str] = ["x", "y", "z"],
 ) -> pl.DataFrame | None:
     """
     Process a single c3d file and return a DataFrame.
@@ -115,7 +118,14 @@ def process_c3d(
         filename (str): The filename of the c3d file.
         activity_categories (list[str]): A list of activity categories to search for.
         trial_count (int): The current trial count.
-        missing_label (str | None): Body location label to use for any unlabelled data.
+        missing_location_label (str | None): Body location label to use for any unlabelled data.
+        measures (list[str]): List of measures (i.e. accel, gyro) to include in the DataFrame.
+                    Default is ["global angle", "highg", "accel", "gyro", "mag"].
+        locations (list[str]): List of IMU body locations (i.e. thigh, pelvis) to include in the DataFrame.
+            Use 'foot sensor' for foot sensor, and 'foot_' for foot imu.
+            Default is ["foot_", "foot sensor", "shank", "thigh", "pelvis"].
+        dimensions (list[str]): List of dimensions to include in the DataFrame.
+            Default is ["x", "y", "z"].
 
     Returns:
         pl.DataFrame | None: The processed data or None if no data found.
@@ -129,22 +139,31 @@ def process_c3d(
     columns = c3d_contents["parameters"]["ANALOG"]["LABELS"]["value"]
     columns = [column.lower() for column in columns]
 
-    if missing_label:
-        measures = ["global angle", "highg", "accel", "gyro", "mag"]
+    if missing_location_label:
         new_columns = []
         for col in columns:
             for measure in measures:
                 if col.startswith(measure + "."):
                     # Add the location label
                     dimension = col[len(measure) :]  # Keep the dimension
-                    col = f"{measure}_{missing_label}{dimension}"
+                    col = f"{measure}_{missing_location_label}{dimension}"
             new_columns.append(col)
         columns = new_columns
 
     df.columns = columns
 
-    placement_labels = ["foot", "shank", "thigh", "pelvis"]
-    filtered_columns = [col for col in df.columns if any(label in col.lower() for label in placement_labels)]
+    # Account for foot sensor label having no 'measure' or 'dimension'
+    if "foot sensor" in locations:
+        measures.append("sensor")
+        dimensions.extend(["lfs", "rfs"])
+
+    filtered_columns = [
+        col
+        for col in df.columns
+        if any(location.lower() in col.lower() for location in locations)
+        and any(measure.lower() in col.lower() for measure in measures)
+        and any(f".{dim.lower()}" in col.lower() for dim in dimensions)
+    ]
 
     df = df.select(filtered_columns)
 
@@ -168,14 +187,28 @@ def process_c3d(
     return df
 
 
-def process_files(input_path: Path, missing_labels: dict, skip_participants: list) -> pl.LazyFrame:
+def process_files(
+    input_path: Path,
+    skip_participants: list,
+    missing_location_labels: dict,
+    measures: list[str] = ["global angle", "highg", "accel", "gyro", "mag"],
+    locations: list[str] = ["foot_", "foot sensor", "shank", "thigh", "pelvis"],
+    dimensions: list[str] = ["x", "y", "z"],
+) -> pl.LazyFrame:
     """
     Process c3d files in the given directory and return a single LazyFrame.
 
     Args:
         input_path (Path): Path to the directory containing the data.
-        missing_labels (dict): If any body location labels are missing in the data, specify them here.
         skip_participants (list): Participant numbers to skip.
+        missing_location_label (dict): If any IMU location labels are missing in the data, specify them here.
+        measures (list[str]): List of measures (i.e. accel, gyro) to include in the DataFrame.
+            Default is ["global angle", "highg", "accel", "gyro", "mag"].
+        locations (list[str]): List of IMU body locations (i.e. thigh, pelvis) to include in the DataFrame.
+            Use 'foot sensor' for foot sensor, and 'foot_' for foot imu.
+            Default is ["foot_", "foot sensor", "shank", "thigh", "pelvis"].
+        dimensions (list[str]): List of dimensions to include in the DataFrame.
+            Default is ["x", "y", "z"].
 
     Returns:
         pl.LazyFrame: The processed data.
@@ -200,7 +233,7 @@ def process_files(input_path: Path, missing_labels: dict, skip_participants: lis
         logger.info(f"Processing participant: {participant}")
         participant_path = os.path.join(input_path, participant)
 
-        missing_label = missing_labels.get(participant_number)
+        missing_label = missing_location_labels.get(participant_number)
 
         for filename in tqdm(os.listdir(participant_path), desc=f"Files in {participant}", leave=False):
             # Ignore any non-c3d files, transition files or files that don't start with the activity categories,
@@ -221,6 +254,9 @@ def process_files(input_path: Path, missing_labels: dict, skip_participants: lis
                     activity_categories,
                     trial_count,
                     missing_label,
+                    measures,
+                    locations,
+                    dimensions,
                 )
                 if df is None:
                     logger.warning(f"Skipping empty file: {filename}")
@@ -245,8 +281,13 @@ def process_files(input_path: Path, missing_labels: dict, skip_participants: lis
 def main(
     input_path: Path = MAIN_DATA_DIR,
     output_path: Path = INTERIM_DATA_DIR / "main_data.parquet",
-    missing_labels: dict = {2: "thigh_l", 6: "pelvis", 7: "pelvis", 16: "thigh_l"},
     skip_participants: list = [],  # noqa: B008
+    missing_location_labels: dict = {
+        2: "thigh_l",
+        6: "pelvis",
+        7: "pelvis",
+        16: "thigh_l",
+    },
 ):
     """
     Process pilot data and save to parquet.
@@ -255,11 +296,11 @@ def main(
     Args:
         input_path (Path): Path to the directory containing the input data.
         output_path (Path): Path to save the processed data to.
-        missing_labels (dict): If any body location labels are missing in the data, specify them here.
         skip_participants (list): Participant numbers to skip.
+        missing_location_labels (dict): If any body location labels are missing in the data, specify them here.
     """
 
-    data = process_files(input_path, missing_labels, skip_participants)
+    data = process_files(input_path, skip_participants, missing_location_labels)
 
     data.sink_parquet(output_path)
     logger.success(f"Output saved to: {output_path}")
