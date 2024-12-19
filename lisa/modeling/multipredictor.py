@@ -15,7 +15,13 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 
 from lisa import evaluate
-from lisa.config import ARTIFACTS_DIR, MLFLOW_URI, PROCESSED_DATA_DIR
+from lisa.config import (
+    ARTIFACTS_DIR,
+    FOOT_SENSOR_PATTERN,
+    IMU_PATTERN,
+    MLFLOW_URI,
+    PROCESSED_DATA_DIR,
+)
 from lisa.features import (
     check_split_balance,
     sequential_stratified_split,
@@ -227,16 +233,22 @@ def main(
         # Extract the unique components from the column names to log
         statistic, measure, location, dimension = set(), set(), set(), set()
 
-        pattern = re.compile(r"^(.*?)_(.*?)_(.*?)\.(.*?)$")
+        imu_pattern = re.compile(IMU_PATTERN)
+        foot_sensor_pattern = re.compile(FOOT_SENSOR_PATTERN)
 
         for key in df.collect_schema().names():
-            match = pattern.match(key)
-            if match:
-                stat, meas, loc, dim = match.groups()
+            imu_match = imu_pattern.match(key)
+            foot_sensor_match = foot_sensor_pattern.match(key)
+            if imu_match:
+                stat, meas, loc, dim = imu_match.groups()
                 statistic.add(stat)
                 measure.add(meas)
                 location.add(loc)
                 dimension.add(dim)
+            elif foot_sensor_match:
+                stat, loc = foot_sensor_match.groups()
+                statistic.add(stat)
+                location.add(loc)
 
         # Log the hyperparameters
         params = {

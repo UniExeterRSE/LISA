@@ -31,6 +31,10 @@ FIGURES_DIR = REPORTS_DIR / "figures"
 
 MLFLOW_URI = "http://127.0.0.1:8080"
 
+# Common Regex Patterns
+IMU_PATTERN = r"^(.*?)_(.*?)_(.*?)\.(.*?)$"
+FOOT_SENSOR_PATTERN = r"^(.*?)_(left foot sensor|right foot sensor)\..*$"
+
 # If tqdm is installed, configure loguru with tqdm.write
 # https://github.com/Delgan/loguru/issues/135
 try:
