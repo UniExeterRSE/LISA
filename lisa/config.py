@@ -21,6 +21,7 @@ PROCESSED_DATA_DIR = DATA_DIR / "processed"
 EXTERNAL_DATA_DIR = DATA_DIR / "external"
 PILOT_DATA_DIR = RAW_DATA_DIR / ONEDRIVE_DIR / "LISA 1 Pilot Data/Pilot 1/120724"
 LABELLED_TEST_DATA_DIR = RAW_DATA_DIR / ONEDRIVE_DIR / "LISA 1 Pilot Data/P1_1608/160824_IMU_DC"
+MAIN_DATA_DIR = RAW_DATA_DIR / ONEDRIVE_DIR / "Main Data Collection"
 
 MODELS_DIR = PROJ_ROOT / "models"
 ARTIFACTS_DIR = PROJ_ROOT / "artifacts"
@@ -29,6 +30,10 @@ REPORTS_DIR = PROJ_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 
 MLFLOW_URI = "http://127.0.0.1:8080"
+
+# Common Regex Patterns
+IMU_PATTERN = r"^(.*?)_(.*?)_(.*?)\.(.*?)$"
+FOOT_SENSOR_PATTERN = r"^(.*?)_(left foot sensor|right foot sensor)\..*$"
 
 # If tqdm is installed, configure loguru with tqdm.write
 # https://github.com/Delgan/loguru/issues/135

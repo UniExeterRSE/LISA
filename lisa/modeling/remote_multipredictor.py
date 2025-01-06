@@ -1,11 +1,11 @@
 import json
+import os
 import re
 import time
 from pathlib import Path
 from typing import Literal
 
 import lightgbm as lgb
-import mlflow
 import numpy as np
 import polars as pl
 from loguru import logger
@@ -15,13 +15,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 
 from lisa import evaluate
-from lisa.config import (
-    ARTIFACTS_DIR,
-    FOOT_SENSOR_PATTERN,
-    IMU_PATTERN,
-    MLFLOW_URI,
-    PROCESSED_DATA_DIR,
-)
+from lisa.config import FOOT_SENSOR_PATTERN, IMU_PATTERN, MODELS_DIR, PROCESSED_DATA_DIR
 from lisa.features import (
     check_split_balance,
     sequential_stratified_split,
@@ -86,11 +80,6 @@ def regressor(
     params = params.copy()
     if model_name != "LR":
         params.setdefault("random_state", 42)
-
-    if model_name == "RF":
-        params.setdefault("n_estimators", 10)
-        params.setdefault("max_depth", 10)
-
     params.setdefault("n_jobs", -1)
 
     models = {
@@ -126,7 +115,8 @@ def _regressor_script(
     y_train: ndarray,
     y_test: ndarray,
     hyperparams: dict[str, any],
-) -> tuple[float, Path, Path]:
+    output_dir: Path,
+) -> float:
     """
     Script set-up and tear-down for fitting the regressor model.
     Logs any imbalance in train-test split, fits the model, and saves the histogram plot
@@ -142,28 +132,26 @@ def _regressor_script(
         hyperparams (dict[str, any]): The hyperparameters for the model.
 
     Returns:
-        tuple[float, Path, Path | None]: The model score, path to the histogram plot,
-        and path to the feature importances if it exists.
+        float: The model score.
     """
     if not check_split_balance(y_train.lazy(), y_test.lazy()).is_empty():
         logger.info(f"{feature_name} unbalance: {check_split_balance(y_train.lazy(), y_test.lazy())}")
 
     y_pred, y_score, model = regressor(model_name, X_train, X_test, y_train, y_test, hyperparams)
 
-    y_plot_path = ARTIFACTS_DIR / f"{model_name}_{feature_name}_hist.png"
+    y_plot_path = output_dir / f"{feature_name}_hist.png"
     hist = regression_histogram(df, y_pred, feature_name.upper())
 
     hist.savefig(y_plot_path)
 
-    feature_importances_path = None
     if model_name == "LGBM" or model_name == "RF":
         sorted_feature_importance_dict = _feature_importances(model, X_train)
 
-        feature_importances_path = ARTIFACTS_DIR / f"feature_importances_{model}_{feature_name}.json"
+        feature_importances_path = output_dir / f"feature_importances_{feature_name}.json"
         with open(feature_importances_path, "w") as f:
             json.dump(sorted_feature_importance_dict, f, indent=4)
 
-    return y_score, y_plot_path, feature_importances_path
+    return y_score
 
 
 def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) -> dict[str, float]:
@@ -193,24 +181,32 @@ def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) 
 
 
 def main(
-    data_path: Path = PROCESSED_DATA_DIR / "P5.parquet",
-    model: Literal["LR", "RF", "LGBM"] = "RF",
+    data_path: Path = PROCESSED_DATA_DIR / "P1&P2.parquet",
+    run_name: str = "multimodel",
+    model: Literal["LR", "RF", "LGBM"] = "LGBM",
     window: int = 300,
     split: float = 0.8,
 ):
     """
     Runs a multimodel predictor on the input data.
     Classifies activity, and predicts speed and incline.
-    Three separate models & scores are trained and logged to MLflow.
+    Three separate models & scores are trained and logged.
 
     Args:
         data_path (Path): Path to the data.
+        run_name (str): Name of the run. Default 'multimodel'.
         model (Literal["LR", "RF", "LGBM"]): Short name of the model 'family' to use.
             Currently supports 'LR' (logistic/linear regression), 'RF' (random forest), 'LGBM' (LightGBM).
         window (int): Size of the sliding window. Default 300.
         split (float): Train-test split. Default 0.8.
     """
     start_time = time.time()
+
+    # Create output stuff
+    output = {"score": {"activity": None, "speed": None, "incline": None}, "params": {}}
+    output_dir = MODELS_DIR / run_name
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     input_df = pl.scan_parquet(data_path)
 
@@ -224,111 +220,99 @@ def main(
     # scaled_X_train, scaled_X_test = X_train, X_test
     logger.info("data scaled")
 
-    mlflow.set_tracking_uri(uri=MLFLOW_URI)
-    mlflow.set_experiment(f"{model} bugfixing")  # Create a new MLflow Experiment
-    with mlflow.start_run(run_name=data_path.stem, log_system_metrics=True):
-        # Set a tag that we can use to remind ourselves what this run was for
-        mlflow.set_tag("Training Info", f"{model} Multipredictor development")
+    # Extract the unique components from the column names to log
+    statistic, measure, location, dimension = set(), set(), set(), set()
 
-        # Extract the unique components from the column names to log
-        statistic, measure, location, dimension = set(), set(), set(), set()
+    imu_pattern = re.compile(IMU_PATTERN)
+    foot_sensor_pattern = re.compile(FOOT_SENSOR_PATTERN)
 
-        imu_pattern = re.compile(IMU_PATTERN)
-        foot_sensor_pattern = re.compile(FOOT_SENSOR_PATTERN)
+    for key in df.collect_schema().names():
+        imu_match = imu_pattern.match(key)
+        foot_sensor_match = foot_sensor_pattern.match(key)
+        if imu_match:
+            stat, meas, loc, dim = imu_match.groups()
+            statistic.add(stat)
+            measure.add(meas)
+            location.add(loc)
+            dimension.add(dim)
+        elif foot_sensor_match:
+            stat, loc = foot_sensor_match.groups()
+            statistic.add(stat)
+            location.add(loc)
 
-        for key in df.collect_schema().names():
-            imu_match = imu_pattern.match(key)
-            foot_sensor_match = foot_sensor_pattern.match(key)
-            if imu_match:
-                stat, meas, loc, dim = imu_match.groups()
-                statistic.add(stat)
-                measure.add(meas)
-                location.add(loc)
-                dimension.add(dim)
-            elif foot_sensor_match:
-                stat, loc = foot_sensor_match.groups()
-                statistic.add(stat)
-                location.add(loc)
+    # Log the hyperparameters
+    output["params"] = {
+        "window": window,
+        "split": split,
+        "statistic": statistic,
+        "measure": measure,
+        "location": location,
+        "dimension": dimension,
+    }
 
-        # Log the hyperparameters
-        params = {
-            "window": window,
-            "split": split,
-            "statistic": statistic,
-            "measure": measure,
-            "location": location,
-            "dimension": dimension,
-        }
-        mlflow.log_params(params)
+    hyperparams = {}
 
-        hyperparams = {}
+    # Predict activity
+    if not check_split_balance(y1_train, y1_test).is_empty():
+        logger.info(f"Activity unbalance: {check_split_balance(y1_train, y1_test)}")
 
-        # Predict activity
-        with mlflow.start_run(nested=True, run_name="activity classifier"):
-            if not check_split_balance(y1_train, y1_test).is_empty():
-                logger.info(f"Activity unbalance: {check_split_balance(y1_train, y1_test)}")
+    # TODO collect all data, for now
+    y1_train = y1_train.collect()
+    y1_test = y1_test.collect()
+    y2_train = y2_train.collect()
+    y2_test = y2_test.collect()
+    y3_train = y3_train.collect()
+    y3_test = y3_test.collect()
+    df = df.collect()
 
-            # TODO collect all data, for now
-            y1_train = y1_train.collect()
-            y1_test = y1_test.collect()
-            y2_train = y2_train.collect()
-            y2_test = y2_test.collect()
-            y3_train = y3_train.collect()
-            y3_test = y3_test.collect()
-            df = df.collect()
+    activity_model = classifier(
+        model,
+        scaled_X_train,
+        y1_train.to_numpy().ravel(),
+        hyperparams,
+    )
 
-            activity_model = classifier(
-                model,
-                scaled_X_train,
-                y1_train.to_numpy().ravel(),
-                hyperparams,
-            )
+    y1_score = activity_model.score(scaled_X_test, y1_test)
+    output["score"]["activity"] = y1_score
 
-            y1_score = activity_model.score(scaled_X_test, y1_test)
-            mlflow.log_metric("score", y1_score)
+    # Create and log confusion matrix
+    labels = df["ACTIVITY"].unique(maintain_order=True)
+    cm_plot_path = output_dir / "confusion_matrix.png"
+    cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
+    logger.info("Confusion Matrix:\n" + str(cm))
 
-            # Create and log confusion matrix
-            labels = df["ACTIVITY"].unique(maintain_order=True)
-            cm_plot_path = ARTIFACTS_DIR / f"{model}_confusion_matrix.png"
-            cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
-            logger.info("Confusion Matrix:\n" + str(cm))
-            mlflow.log_artifact(cm_plot_path)
+    # Predict speed
+    output["score"]["speed"] = _regressor_script(
+        model,
+        "Speed",
+        df,
+        scaled_X_train,
+        scaled_X_test,
+        y2_train,
+        y2_test,
+        hyperparams,
+        output_dir,
+    )
 
-        # Predict speed
-        with mlflow.start_run(nested=True, run_name="speed regressor"):
-            y2_score, y2_plot_path, feature_importances_path = _regressor_script(
-                model,
-                "Speed",
-                df,
-                scaled_X_train,
-                scaled_X_test,
-                y2_train,
-                y2_test,
-                hyperparams,
-            )
+    # Predict incline
+    output["score"]["incline"] = _regressor_script(
+        model,
+        "Incline",
+        df,
+        scaled_X_train,
+        scaled_X_test,
+        y3_train,
+        y3_test,
+        hyperparams,
+        output_dir,
+    )
 
-            mlflow.log_metric("score", y2_score)
-            mlflow.log_artifact(y2_plot_path)
-            if feature_importances_path:
-                mlflow.log_artifact(feature_importances_path)
+    # Save output to a JSON file
+    output_json_path = output_dir / "output.json"
+    with open(output_json_path, "w") as f:
+        json.dump(output, f, indent=4)
 
-        # Predict incline
-        with mlflow.start_run(nested=True, run_name="incline regressor"):
-            y3_score, y3_plot_path, feature_importances_path = _regressor_script(
-                model,
-                "Incline",
-                df,
-                scaled_X_train,
-                scaled_X_test,
-                y3_train,
-                y3_test,
-                hyperparams,
-            )
-
-            mlflow.log_metric("score", y3_score)
-            mlflow.log_artifact(y3_plot_path)
-            if feature_importances_path:
-                mlflow.log_artifact(feature_importances_path)
+    logger.info(f"Output saved to: {output_json_path}")
 
     end_time = time.time()  # Record the end time
     elapsed_time = end_time - start_time  # Calculate the elapsed time

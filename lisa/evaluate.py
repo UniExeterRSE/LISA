@@ -8,6 +8,8 @@ import polars as pl
 from sklearn import metrics
 from sklearn.base import BaseEstimator
 
+from lisa.config import FOOT_SENSOR_PATTERN, IMU_PATTERN
+
 
 def confusion_matrix(
     model: BaseEstimator,
@@ -72,18 +74,26 @@ def analyse_feature_importances(json_path: Path) -> None:
     location_scores = defaultdict(float)
     dimension_scores = defaultdict(float)
 
-    # Regular expression to match the statistic, measure, location, and dimension parts of the key
-    pattern = re.compile(r"^(.*?)_(.*?)_(.*?)\.(.*?)$")
+    # Regex to match the statistic, measure, location, and dimension parts of the key
+    imu_pattern = re.compile(IMU_PATTERN)
+
+    # Regex for foot sensor only, i.e. min_left foot sensor.lfs
+    foot_sensor_pattern = re.compile(FOOT_SENSOR_PATTERN)
 
     # Parse the keys and aggregate the scores
     for key, importance in feature_importances.items():
-        match = pattern.match(key)
-        if match:
-            statistic, measure, location, dimension = match.groups()
+        imu_match = imu_pattern.match(key)
+        foot_sensor_match = foot_sensor_pattern.match(key)
+        if imu_match:
+            statistic, measure, location, dimension = imu_match.groups()
             statistic_scores[statistic] += importance
             measure_scores[measure] += importance
             location_scores[location] += importance
             dimension_scores[dimension] += importance
+        elif foot_sensor_match:
+            statistic, location = foot_sensor_match.groups()
+            statistic_scores[statistic] += importance
+            location_scores[location] += importance
 
     # Function to print sorted scores
     def print_sorted_scores(title, scores):

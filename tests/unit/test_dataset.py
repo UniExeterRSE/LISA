@@ -3,88 +3,7 @@ import polars as pl
 from ezc3d import c3d
 from polars.testing import assert_frame_equal
 
-from lisa.dataset import _cartesian_to_spherical, process_c3d
-
-
-def test_cartesian_to_spherical() -> None:
-    """
-    Test _cartesian_to_spherical function
-    """
-    # Create a sample DataFrame with cartesian coordinates
-    df = pl.DataFrame(
-        {
-            "feature.x": [1, 2, 3],
-            "feature.y": [4, 5, 6],
-            "feature.z": [7, 8, 9],
-        }
-    )
-
-    # Call the _cartesian_to_spherical function
-    result = _cartesian_to_spherical(df)
-
-    # Check the result
-    expected_result = pl.DataFrame(
-        {
-            "feature_r": [8.124, 9.644, 11.225],
-            "feature_theta": [0.5323, 0.5925, 0.6405],
-            "feature_phi": [1.326, 1.19, 1.107],
-        }
-    )
-
-    assert_frame_equal(result, expected_result, check_column_order=False, check_dtypes=False, rtol=1e-3)
-
-
-def test_cartesian_to_spherical_zeros() -> None:
-    """
-    Test _cartesian_to_spherical function when all values are zero
-    """
-    # Create a sample DataFrame with cartesian coordinates
-    df = pl.DataFrame(
-        {
-            "feature.x": [0],
-            "feature.y": [0],
-            "feature.z": [0],
-        }
-    )
-
-    # Call the _cartesian_to_spherical function
-    result = _cartesian_to_spherical(df)
-
-    # Check the result
-    expected_result = pl.DataFrame(
-        {
-            "feature_r": [0],
-            "feature_theta": [0],
-            "feature_phi": [0],
-        }
-    )
-
-    assert_frame_equal(result, expected_result, check_column_order=False, check_dtypes=False, rtol=1e-3)
-
-
-def test_cartesian_to_spherical_missing_dim():
-    """
-    Test conversion skips features with missing dimensions
-    """
-
-    # Create a sample DataFrame with missing z coordinate for feature 'A'
-    df = pl.DataFrame(
-        {
-            "A.x": [1, 2, 3],
-            "A.y": [4, 5, 6],
-            "B.x": [7, 8, 9],
-            "B.y": [10, 11, 12],
-            "B.z": [13, 14, 15],
-        }
-    )
-
-    # Call the _cartesian_to_spherical function
-    result = _cartesian_to_spherical(df)
-
-    # Check the result
-    expected_headings = ["A.x", "A.y", "B_r", "B_theta", "B_phi"]
-
-    assert result.columns == expected_headings
+from lisa.dataset import process_c3d
 
 
 def test_process_c3d() -> None:
@@ -96,7 +15,7 @@ def test_process_c3d() -> None:
         "parameters": {
             "ANALOG": {
                 "RATE": {"value": [100]},
-                "LABELS": {"value": ["Global Angle_Foot_L.x", "Global Angle_Foot_L.y", "Global Angle_Foot_L.z"]},
+                "LABELS": {"value": ["Global Angle_Foot_L.x", "Global Angle_Foot_L.y", "left foot sensor.lfs"]},
             }
         },
     }
@@ -108,23 +27,76 @@ def test_process_c3d() -> None:
     c3d_contents["parameters"]["ANALOG"]["LABELS"]["value"] = [
         "Global Angle_Foot_L.x",
         "Global Angle_Foot_L.y",
-        "Global Angle_Foot_L.z",
+        "left foot sensor.lfs",
     ]
 
     filename = "Jogging2_5ms_weighted_10 decline"
     activity_categories = ["walk", "jog", "run", "jump"]
-    imu_label_exists = True
     trial_count = 0
 
     # Call the process_c3d function
-    result = process_c3d(c3d_contents, filename, activity_categories, imu_label_exists, trial_count)
+    result = process_c3d(c3d_contents, filename, activity_categories, trial_count, None)
 
     # Check the result
     expected_result = pl.DataFrame(
         {
-            "Global Angle_Foot_L.x": [1, 2, 3],
-            "Global Angle_Foot_L.y": [4, 5, 6],
-            "Global Angle_Foot_L.z": [7, 8, 9],
+            "global angle_foot_l.x": [1, 2, 3],
+            "global angle_foot_l.y": [4, 5, 6],
+            "left foot sensor.lfs": [7, 8, 9],
+            "ACTIVITY": ["run", "run", "run"],
+            "INCLINE": [-10, -10, -10],
+            "SPEED": [2.5, 2.5, 2.5],
+            "TIME": [0, 10, 20],
+            "TRIAL": [0, 0, 0],
+        }
+    )
+
+    assert_frame_equal(
+        result,
+        expected_result,
+        check_column_order=False,
+        check_dtypes=False,
+        rtol=1e-3,
+    )
+
+
+def test_process_c3d_filter_columns() -> None:
+    # Create a mock c3d object
+    c3d_contents = c3d()
+    c3d_contents["data"]["analogs"] = np.array(
+        [[[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15], [16, 17, 18]]]
+    )
+    c3d_contents["parameters"]["ANALOG"]["RATE"]["value"] = np.array([100])
+    c3d_contents["parameters"]["ANALOG"]["LABELS"]["value"] = [
+        "Global Angle_Foot_L.y",
+        "Global Angle_Thigh_L.y",
+        "Global Angle_Thigh_L.x",
+        "left foot sensor.lfs",
+        "Accel Thigh_R.y",
+        "Gyro Thigh_R.z",
+    ]
+
+    filename = "Jogging2_5ms_weighted_10 decline"
+    activity_categories = ["walk", "jog", "run", "jump"]
+    trial_count = 0
+
+    # Call the process_c3d function
+    result = process_c3d(
+        c3d_contents,
+        filename,
+        activity_categories,
+        trial_count,
+        None,
+        measures=["Global Angle"],
+        locations=["foot sensor", "thigh"],
+        dimensions=["y"],
+    )
+
+    # Check the result
+    expected_result = pl.DataFrame(
+        {
+            "global angle_thigh_l.y": [4, 5, 6],
+            "left foot sensor.lfs": [10, 11, 12],
             "ACTIVITY": ["run", "run", "run"],
             "INCLINE": [-10, -10, -10],
             "SPEED": [2.5, 2.5, 2.5],
