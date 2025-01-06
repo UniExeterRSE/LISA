@@ -181,10 +181,10 @@ def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) 
 
 
 def main(
-    data_path: Path = PROCESSED_DATA_DIR / "P1&P2.parquet",
-    run_name: str = "multimodel",
+    data_path: Path = PROCESSED_DATA_DIR / "P1.parquet",
+    run_name: str = "testing",
     model: Literal["LR", "RF", "LGBM"] = "LGBM",
-    window: int = 300,
+    window: int = 800,
     split: float = 0.8,
 ):
     """
