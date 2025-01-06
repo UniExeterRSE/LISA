@@ -280,8 +280,8 @@ def process_files(
 
 def main(
     input_path: Path = MAIN_DATA_DIR,
-    output_path: Path = INTERIM_DATA_DIR / "main_data.parquet",
-    skip_participants: list = [],  # noqa: B008
+    output_path: Path = INTERIM_DATA_DIR / "full_P1-14.parquet",
+    skip_participants: list = [15, 16],  # noqa: B008
     missing_location_labels: dict = {
         2: "thigh_l",
         6: "pelvis",
