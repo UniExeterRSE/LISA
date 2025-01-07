@@ -13,7 +13,7 @@ def main(
     input_path: Path = MAIN_DATA_DIR,
     output_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
     models: list[str] = ["LGBM", "RF", "LR"],
-    run_id: str = "_xyz",
+    run_id: str = "_z",
 ):
     """
     Script for end-to-end processing of the LISA dataset.
@@ -27,7 +27,7 @@ def main(
     split = 0.8
     measures = ["global angle", "mag", "gyro", "accel"]
     locations = ["pelvis", "thigh", "shank", "foot_", "foot sensor"]
-    dimensions = ["z", "y", "x"]
+    dimensions = ["z"]
     stats = ["min", "max"]
 
     feature_extraction(
