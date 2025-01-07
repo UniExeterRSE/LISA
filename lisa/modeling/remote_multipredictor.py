@@ -1,5 +1,6 @@
 import json
 import os
+import pickle
 import re
 import time
 from pathlib import Path
@@ -121,7 +122,7 @@ def _regressor_script(
     y_test: ndarray,
     hyperparams: dict[str, any],
     output_dir: Path,
-) -> float:
+) -> tuple[float, RegressorModel]:
     """
     Script set-up and tear-down for fitting the regressor model.
     Logs any imbalance in train-test split, fits the model, and saves the histogram plot
@@ -138,6 +139,7 @@ def _regressor_script(
 
     Returns:
         float: The model score.
+        RegressorModel: The trained regressor model.
     """
     if not check_split_balance(y_train.lazy(), y_test.lazy()).is_empty():
         logger.info(f"{feature_name} unbalance: {check_split_balance(y_train.lazy(), y_test.lazy())}")
@@ -156,7 +158,7 @@ def _regressor_script(
         with open(feature_importances_path, "w") as f:
             json.dump(sorted_feature_importance_dict, f, indent=4)
 
-    return y_score
+    return y_score, model
 
 
 def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) -> dict[str, float]:
@@ -191,6 +193,7 @@ def main(
     model: Literal["LR", "RF", "LGBM"] = "LGBM",
     window: int = 800,
     split: float = 0.8,
+    save: bool = False,
 ):
     """
     Runs a multimodel predictor on the input data.
@@ -204,6 +207,7 @@ def main(
             Currently supports 'LR' (logistic/linear regression), 'RF' (random forest), 'LGBM' (LightGBM).
         window (int): Size of the sliding window. Default 300.
         split (float): Train-test split. Default 0.8.
+        save (bool): Whether to save the scaler and mdodels to pkl files. Default False.
     """
     start_time = time.time()
 
@@ -222,7 +226,7 @@ def main(
     )
     logger.info("scaling data...")
     scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
-    # scaled_X_train, scaled_X_test = X_train, X_test
+
     logger.info("data scaled")
 
     # Extract the unique components from the column names to log
@@ -261,7 +265,7 @@ def main(
     if not check_split_balance(y1_train, y1_test).is_empty():
         logger.info(f"Activity unbalance: {check_split_balance(y1_train, y1_test)}")
 
-    # TODO collect all data, for now
+    # Realise the data
     y1_train = y1_train.collect()
     y1_test = y1_test.collect()
     y2_train = y2_train.collect()
@@ -287,7 +291,7 @@ def main(
     logger.info("Confusion Matrix:\n" + str(cm))
 
     # Predict speed
-    output["score"]["speed"] = _regressor_script(
+    output["score"]["speed"], speed_model = _regressor_script(
         model,
         "Speed",
         df,
@@ -300,7 +304,7 @@ def main(
     )
 
     # Predict incline
-    output["score"]["incline"] = _regressor_script(
+    output["score"]["incline"], incline_model = _regressor_script(
         model,
         "Incline",
         df,
@@ -318,6 +322,19 @@ def main(
         json.dump(output, f, indent=4)
 
     logger.info(f"Output saved to: {output_json_path}")
+
+    # save scaler and models to pickle files
+    if save:
+        with open(output_dir / "scaler.pkl", "wb") as f:
+            pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(output_dir / "activity.pkl", "wb") as f:
+            pickle.dump(activity_model, f, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(output_dir / "speed.pkl", "wb") as f:
+            pickle.dump(speed_model, f, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(output_dir / "incline.pkl", "wb") as f:
+            pickle.dump(incline_model, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        logger.info("Scaler and models saved to pickle files")
 
     end_time = time.time()  # Record the end time
     elapsed_time = end_time - start_time  # Calculate the elapsed time
