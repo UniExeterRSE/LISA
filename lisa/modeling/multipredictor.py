@@ -193,7 +193,7 @@ def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) 
 
 
 def main(
-    data_path: Path = PROCESSED_DATA_DIR / "P5&6.parquet",
+    data_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
     model: Literal["LR", "RF", "LGBM"] = "LGBM",
     window: int = 800,
     split: float = 0.8,
@@ -219,10 +219,13 @@ def main(
     X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
         df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
     )
-    logger.info("scaling data...")
-    scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
-    # scaled_X_train, scaled_X_test = X_train, X_test
-    logger.info("data scaled")
+
+    if model == "LR":
+        logger.info("scaling data...")
+        scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
+        logger.info("data scaled")
+    else:
+        scaled_X_train, scaled_X_test = X_train.collect(), X_test.collect()
 
     mlflow.set_tracking_uri(uri=MLFLOW_URI)
     mlflow.set_experiment(f"{model} bugfixing")  # Create a new MLflow Experiment

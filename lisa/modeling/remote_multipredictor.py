@@ -224,10 +224,13 @@ def main(
     X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
         df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
     )
-    logger.info("scaling data...")
-    scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
-
-    logger.info("data scaled")
+    if model == "LR":
+        logger.info("scaling data...")
+        scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
+        logger.info("data scaled")
+    else:
+        scaled_X_train, scaled_X_test = X_train.collect(), X_test.collect()
+        scaler = None
 
     # Extract the unique components from the column names to log
     statistic, measure, location, dimension = set(), set(), set(), set()
@@ -325,8 +328,9 @@ def main(
 
     # save scaler and models to pickle files
     if save:
-        with open(output_dir / "scaler.pkl", "wb") as f:
-            pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
+        if scaler is not None:
+            with open(output_dir / "scaler.pkl", "wb") as f:
+                pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
         with open(output_dir / "activity.pkl", "wb") as f:
             pickle.dump(activity_model, f, protocol=pickle.HIGHEST_PROTOCOL)
         with open(output_dir / "speed.pkl", "wb") as f:
