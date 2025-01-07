@@ -80,6 +80,11 @@ def regressor(
     params = params.copy()
     if model_name != "LR":
         params.setdefault("random_state", 42)
+
+    if model_name == "RF":
+        params.setdefault("n_estimators", 10)
+        params.setdefault("max_depth", 10)
+
     params.setdefault("n_jobs", -1)
 
     models = {

@@ -13,7 +13,7 @@ def main(
     input_path: Path = MAIN_DATA_DIR,
     output_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
     models: list[str] = ["LGBM", "RF", "LR"],
-    run_id: str = "2 dim all models",
+    run_id: str = "_xyz",
 ):
     """
     Script for end-to-end processing of the LISA dataset.
@@ -27,7 +27,7 @@ def main(
     split = 0.8
     measures = ["global angle", "mag", "gyro", "accel"]
     locations = ["pelvis", "thigh", "shank", "foot_", "foot sensor"]
-    dimensions = ["z", "y"]
+    dimensions = ["z", "y", "x"]
     stats = ["min", "max"]
 
     feature_extraction(
@@ -47,6 +47,7 @@ def main(
     logger.info("Completed processing")
 
     for model in tqdm(models):
+        run_id = model + run_id
         multipredictor_main(output_path, run_id, model, window, split)
 
     logger.success("Completed training")
