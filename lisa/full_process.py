@@ -47,8 +47,8 @@ def main(
     logger.info("Completed processing")
 
     for model in tqdm(models):
-        run_id = model + "_" + run_id
-        multipredictor_main(output_path, run_id, model, window, split, True)
+        run_name = model + "_" + run_id
+        multipredictor_main(output_path, run_name, model, window, split, True)
 
     logger.success("Completed training")
 
