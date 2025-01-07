@@ -244,10 +244,10 @@ def main(
     output["params"] = {
         "window": window,
         "split": split,
-        "statistic": statistic,
-        "measure": measure,
-        "location": location,
-        "dimension": dimension,
+        "statistic": list(statistic),
+        "measure": list(measure),
+        "location": list(location),
+        "dimension": list(dimension),
     }
 
     hyperparams = {}
