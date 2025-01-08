@@ -54,4 +54,4 @@ def main(
 
 
 if __name__ == "__main__":
-    main(run_id="mean", stats=["mean", "min", "max"])
+    main(run_id="activity_only", dimensions=["y", "z"])

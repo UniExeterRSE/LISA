@@ -11,6 +11,7 @@ import numpy as np
 import polars as pl
 from loguru import logger
 from numpy import ndarray
+from sklearn import metrics
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
@@ -46,13 +47,16 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
     params.setdefault("n_jobs", -1)
     params.setdefault("random_state", 42)
 
+    class_weights = {"run": 1 / 0.4, "jump": 1 / 0.024, "walk": 1 / 0.576}
+    sample_weight = np.array([class_weights[label] for label in y_train])
+
     models = {
         "LR": lambda **params: OneVsRestClassifier(LogisticRegression(**params)),
         "RF": lambda **params: RandomForestClassifier(**params),
         "LGBM": lambda **params: lgb.LGBMClassifier(**params),
     }
 
-    return models[model_name](**params).fit(X_train, y_train)
+    return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
 
 def regressor(
@@ -211,8 +215,8 @@ def main(
     """
     start_time = time.time()
 
-    # Create output stuff
-    output = {"score": {"activity": None, "speed": None, "incline": None}, "params": {}}
+    # Create output record
+    output = {"score": {"activity": None, "activity_weighted": None}, "params": {}}
     output_dir = MODELS_DIR / run_name
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -221,9 +225,7 @@ def main(
 
     # Prepare data
     df = input_df
-    X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
-        df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
-    )
+    X_train, X_test, y1_train, y1_test = sequential_stratified_split(df, split, window, ["ACTIVITY"])
     if model == "LR":
         logger.info("scaling data...")
         scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
@@ -271,10 +273,10 @@ def main(
     # Realise the data
     y1_train = y1_train.collect()
     y1_test = y1_test.collect()
-    y2_train = y2_train.collect()
-    y2_test = y2_test.collect()
-    y3_train = y3_train.collect()
-    y3_test = y3_test.collect()
+    # y2_train = y2_train.collect()
+    # y2_test = y2_test.collect()
+    # y3_train = y3_train.collect()
+    # y3_test = y3_test.collect()
     df = df.collect()
 
     activity_model = classifier(
@@ -287,37 +289,42 @@ def main(
     y1_score = activity_model.score(scaled_X_test, y1_test)
     output["score"]["activity"] = y1_score
 
+    # Calculate and log the weighted f1_score
+    y1_pred = activity_model.predict(scaled_X_test)
+    f1_av = metrics.f1_score(y1_test, y1_pred, average="weighted")
+    output["score"]["activity_weighted"] = f1_av
+
     # Create and log confusion matrix
     labels = df["ACTIVITY"].unique(maintain_order=True)
     cm_plot_path = output_dir / "confusion_matrix.png"
     cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
     logger.info("Confusion Matrix:\n" + str(cm))
 
-    # Predict speed
-    output["score"]["speed"], speed_model = _regressor_script(
-        model,
-        "Speed",
-        df,
-        scaled_X_train,
-        scaled_X_test,
-        y2_train,
-        y2_test,
-        hyperparams,
-        output_dir,
-    )
+    # # Predict speed
+    # output["score"]["speed"], speed_model = _regressor_script(
+    #     model,
+    #     "Speed",
+    #     df,
+    #     scaled_X_train,
+    #     scaled_X_test,
+    #     y2_train,
+    #     y2_test,
+    #     hyperparams,
+    #     output_dir,
+    # )
 
-    # Predict incline
-    output["score"]["incline"], incline_model = _regressor_script(
-        model,
-        "Incline",
-        df,
-        scaled_X_train,
-        scaled_X_test,
-        y3_train,
-        y3_test,
-        hyperparams,
-        output_dir,
-    )
+    # # Predict incline
+    # output["score"]["incline"], incline_model = _regressor_script(
+    #     model,
+    #     "Incline",
+    #     df,
+    #     scaled_X_train,
+    #     scaled_X_test,
+    #     y3_train,
+    #     y3_test,
+    #     hyperparams,
+    #     output_dir,
+    # )
 
     # Save output to a JSON file
     output_json_path = output_dir / "output.json"
@@ -333,10 +340,10 @@ def main(
                 pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
         with open(output_dir / "activity.pkl", "wb") as f:
             pickle.dump(activity_model, f, protocol=pickle.HIGHEST_PROTOCOL)
-        with open(output_dir / "speed.pkl", "wb") as f:
-            pickle.dump(speed_model, f, protocol=pickle.HIGHEST_PROTOCOL)
-        with open(output_dir / "incline.pkl", "wb") as f:
-            pickle.dump(incline_model, f, protocol=pickle.HIGHEST_PROTOCOL)
+        # with open(output_dir / "speed.pkl", "wb") as f:
+        #     pickle.dump(speed_model, f, protocol=pickle.HIGHEST_PROTOCOL)
+        # with open(output_dir / "incline.pkl", "wb") as f:
+        #     pickle.dump(incline_model, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.info("Scaler and models saved to pickle files")
 
