@@ -68,7 +68,7 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
     models = {
         "LR": lambda **params: OneVsRestClassifier(LogisticRegression(**params).set_fit_request(sample_weight=True)),
         "RF": lambda **params: RandomForestClassifier(**params),
-        "LGBM": lambda **params: lgb.LGBMClassifier(**params),
+        "LGBM": lambda **params: lgb.LGBMClassifier(**params).set_fit_request(sample_weight=True),
     }
 
     grid_search = GridSearchCV(
