@@ -72,7 +72,7 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
     }
 
     grid_search = GridSearchCV(
-        estimator=models[model_name],
+        estimator=models[model_name](**params),
         param_grid=param_grid,
         scoring=scorer,
         cv=3,  # 3-fold cross-validation
@@ -80,7 +80,7 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
         n_jobs=-1,  # Use all available processors
     )
 
-    return grid_search.fit(X_train, y_train)
+    return grid_search.fit(X_train, y_train, sample_weight=sample_weight)
 
     return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
