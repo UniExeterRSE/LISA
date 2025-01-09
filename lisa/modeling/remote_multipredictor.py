@@ -14,6 +14,7 @@ from numpy import ndarray
 from sklearn import metrics, set_config
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.model_selection import GridSearchCV
 from sklearn.multiclass import OneVsRestClassifier
 
 from lisa import evaluate
@@ -53,11 +54,34 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
     class_weights = {"run": 1 / 0.4, "jump": 1 / 0.024, "walk": 1 / 0.576}
     sample_weight = np.array([class_weights[label] for label in y_train])
 
+    # LGBM tuning
+    param_grid = {
+        "lambda_l1": [0.0, 0.1, 1.0, 10.0],
+        "lambda_l2": [0.0, 0.1, 1.0, 10.0],
+        "min_data_in_leaf": [10, 20, 50],
+        "num_leaves": [15, 31, 63],
+        "learning_rate": [0.01, 0.1],
+    }
+
+    scorer = metrics.make_scorer(metrics.f1_score, average="macro")
+
     models = {
         "LR": lambda **params: OneVsRestClassifier(LogisticRegression(**params).set_fit_request(sample_weight=True)),
         "RF": lambda **params: RandomForestClassifier(**params),
         "LGBM": lambda **params: lgb.LGBMClassifier(**params),
     }
+
+    grid_search = GridSearchCV(
+        estimator=models[model_name],
+        param_grid=param_grid,
+        scoring=scorer,
+        cv=3,  # 3-fold cross-validation
+        verbose=2,
+        n_jobs=-1,  # Use all available processors
+    )
+
+    return grid_search.fit(X_train, y_train)
+
     return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
 
@@ -264,6 +288,7 @@ def main(
         "measure": list(measure),
         "location": list(location),
         "dimension": list(dimension),
+        "hyperparams": {},
     }
 
     hyperparams = {}
@@ -288,8 +313,13 @@ def main(
         hyperparams,
     )
 
-    y1_score = activity_model.score(scaled_X_test, y1_test)
-    output["score"]["activity"] = y1_score
+    # y1_score = activity_model.score(scaled_X_test, y1_test)
+    output["score"]["activity"] = activity_model.best_score_
+    output["params"]["hyperparams"] = activity_model.best_params_
+    activity_model = activity_model.best_estimator_
+
+    logger.info(f"best score: {activity_model.best_score_}")
+    logger.info(f"best params: {activity_model.best_params_}")
 
     # Calculate and log the weighted f1_score
     y1_pred = activity_model.predict(scaled_X_test)

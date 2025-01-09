@@ -10,11 +10,11 @@ from lisa.modeling.remote_multipredictor import main as multipredictor_main
 def main(
     input_path: Path = MAIN_DATA_DIR,
     output_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
-    models: list[str] = ["LR"],
-    run_id: str = "z",
+    models: list[str] = ["LGBM"],
+    run_id: str = "acitivity_tuning",
     measures=["global angle", "mag", "gyro", "accel"],
     locations=["pelvis", "thigh", "shank", "foot_", "foot sensor"],
-    dimensions=["z"],
+    dimensions=["y", "z"],
     stats=["min", "max"],
 ):
     """
@@ -22,7 +22,7 @@ def main(
     """
 
     # missing_labels = {2: "thigh_l", 6: "pelvis", 7: "pelvis", 16: "thigh_l"}
-    # skip_participants = list(range(1, 17))
+    # skip_participants = list(range(1, 15))
     # skip_participants = [15, 16]
 
     window = 800
@@ -42,7 +42,7 @@ def main(
     #     stats,
     #     False,
     # )
-    # logger.info("Completed processing")
+    logger.info("Completed processing")
 
     for model in tqdm(models):
         run_name = model + "_" + run_id
@@ -52,4 +52,4 @@ def main(
 
 
 if __name__ == "__main__":
-    main(run_id="activity_only", dimensions=["y", "z"])
+    main()
