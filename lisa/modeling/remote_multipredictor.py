@@ -54,11 +54,10 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
     sample_weight = np.array([class_weights[label] for label in y_train])
 
     models = {
-        "LR": lambda **params: OneVsRestClassifier(LogisticRegression(**params)),
+        "LR": lambda **params: OneVsRestClassifier(LogisticRegression(**params).set_fit_request(sample_weight=True)),
         "RF": lambda **params: RandomForestClassifier(**params),
         "LGBM": lambda **params: lgb.LGBMClassifier(**params),
     }
-
     return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
 
@@ -195,9 +194,9 @@ def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) 
 
 
 def main(
-    data_path: Path = PROCESSED_DATA_DIR / "P1.parquet",
+    data_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
     run_name: str = "testing",
-    model: Literal["LR", "RF", "LGBM"] = "LGBM",
+    model: Literal["LR", "RF", "LGBM"] = "LR",
     window: int = 800,
     split: float = 0.8,
     save: bool = False,
