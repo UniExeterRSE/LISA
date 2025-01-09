@@ -11,7 +11,7 @@ import numpy as np
 import polars as pl
 from loguru import logger
 from numpy import ndarray
-from sklearn import metrics
+from sklearn import metrics, set_config
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
@@ -43,6 +43,9 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
     Returns:
         ClassifierModel: The trained classifier model.
     """
+    # allow sample_weight in the fit method for LR
+    set_config(enable_metadata_routing=True)
+
     params = params.copy()
     params.setdefault("n_jobs", -1)
     params.setdefault("random_state", 42)
@@ -56,14 +59,7 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
         "LGBM": lambda **params: lgb.LGBMClassifier(**params),
     }
 
-    if model_name == "LR":
-        # Handle sample_weight separately for LogisticRegression
-        model = OneVsRestClassifier(LogisticRegression(**params))
-        for estimator in model.estimators_:
-            estimator.fit(X_train, y_train, sample_weight=sample_weight)
-        return model
-    else:
-        return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
+    return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
 
 def regressor(
