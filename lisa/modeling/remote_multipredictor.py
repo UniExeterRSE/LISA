@@ -56,7 +56,14 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
         "LGBM": lambda **params: lgb.LGBMClassifier(**params),
     }
 
-    return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
+    if model_name == "LR":
+        # Handle sample_weight separately for LogisticRegression
+        model = OneVsRestClassifier(LogisticRegression(**params))
+        for estimator in model.estimators_:
+            estimator.fit(X_train, y_train, sample_weight=sample_weight)
+        return model
+    else:
+        return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
 
 def regressor(
