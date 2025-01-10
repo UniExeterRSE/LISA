@@ -70,7 +70,7 @@ def regressor(
     y_train: ndarray,
     y_test: ndarray,
     params: dict[str, any],
-) -> tuple[ndarray, float, RegressorModel]:
+) -> tuple[ndarray, float, float, RegressorModel]:
     """
     Fits a regressor model to the input data.
     Filters out the rows with null values (non-locomotion activities) before fitting.
@@ -83,7 +83,7 @@ def regressor(
         params (dict[str, any]): The hyperparameters for the model.
 
     Returns:
-        tuple[ndarray, float, RegressorModel]: The predicted value, model score and model.
+        tuple[ndarray, float, float, RegressorModel]: The predicted value, r2 and rmse scores, and model.
     """
 
     params = params.copy()
@@ -115,9 +115,10 @@ def regressor(
     y_test_filtered = y_test.filter(test_non_null_mask)
     y_pred = model.predict(X_test_filtered)
 
-    y_score = model.score(X_test_filtered, y_test_filtered)
+    rmse = np.sqrt(metrics.mean_squared_error(y_test_filtered, y_pred))
+    r2 = metrics.r2_score(y_test_filtered, y_pred)
 
-    return y_pred, y_score, model
+    return y_pred, r2, rmse, model
 
 
 def _regressor_script(
@@ -130,7 +131,7 @@ def _regressor_script(
     y_test: ndarray,
     hyperparams: dict[str, any],
     output_dir: Path,
-) -> tuple[float, RegressorModel]:
+) -> tuple[float, float, RegressorModel]:
     """
     Script set-up and tear-down for fitting the regressor model.
     Logs any imbalance in train-test split, fits the model, and saves the histogram plot
@@ -146,13 +147,14 @@ def _regressor_script(
         hyperparams (dict[str, any]): The hyperparameters for the model.
 
     Returns:
-        float: The model score.
+        float: The r2 score.
+        float: The rmse score.
         RegressorModel: The trained regressor model.
     """
     if not check_split_balance(y_train.lazy(), y_test.lazy()).is_empty():
         logger.info(f"{feature_name} unbalance: {check_split_balance(y_train.lazy(), y_test.lazy())}")
 
-    y_pred, y_score, model = regressor(model_name, X_train, X_test, y_train, y_test, hyperparams)
+    y_pred, r2, rmse, model = regressor(model_name, X_train, X_test, y_train, y_test, hyperparams)
 
     y_plot_path = output_dir / f"{feature_name}_hist.png"
     hist = regression_histogram(df, y_pred, feature_name.upper())
@@ -166,7 +168,7 @@ def _regressor_script(
         with open(feature_importances_path, "w") as f:
             json.dump(sorted_feature_importance_dict, f, indent=4)
 
-    return y_score, model
+    return r2, rmse, model
 
 
 def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) -> dict[str, float]:
@@ -220,7 +222,17 @@ def main(
     start_time = time.time()
 
     # Create output record
-    output = {"score": {"activity": None, "activity_weighted": None}, "params": {}}
+    output = {
+        "score": {
+            "activity": None,
+            "activity_weighted": None,
+            "speed_r2": None,
+            "speed_rmse": None,
+            "incline_r2": None,
+            "incline_rmse": None,
+        },
+        "params": {},
+    }
     output_dir = MODELS_DIR / run_name
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -229,7 +241,9 @@ def main(
 
     # Prepare data
     df = input_df
-    X_train, X_test, y1_train, y1_test = sequential_stratified_split(df, split, window, ["ACTIVITY"])
+    X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
+        df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
+    )
     if model == "LR":
         logger.info("scaling data...")
         scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
@@ -258,21 +272,23 @@ def main(
             statistic.add(stat)
             location.add(loc)
 
-    hyperparams = {
-        "bagging_fraction": 0.6,
-        "bagging_freq": 5,
-        "extra_trees": True,
-        "feature_fraction": 0.6,
-        "lambda_l1": 0.0,
-        "lambda_l2": 0.1,
-        "max_bin": 255,
-        "max_depth": 3,
-        "min_data_in_leaf": 50,
-        "min_gain_to_split": 0.1,
-        "min_sum_hessian_in_leaf": 0.1,
-        "num_leaves": 63,
-        "path_smooth": 0.3,
-    }
+    hyperparams = {}
+    if model == "LGBM":
+        hyperparams = {
+            "bagging_fraction": 0.6,
+            "bagging_freq": 5,
+            "extra_trees": True,
+            "feature_fraction": 0.6,
+            "lambda_l1": 0.0,
+            "lambda_l2": 0.1,
+            "max_bin": 255,
+            "max_depth": 3,
+            "min_data_in_leaf": 50,
+            "min_gain_to_split": 0.1,
+            "min_sum_hessian_in_leaf": 0.1,
+            "num_leaves": 63,
+            "path_smooth": 0.3,
+        }
 
     # Log the parameters
     output["params"] = {
@@ -292,10 +308,10 @@ def main(
     # Realise the data
     y1_train = y1_train.collect()
     y1_test = y1_test.collect()
-    # y2_train = y2_train.collect()
-    # y2_test = y2_test.collect()
-    # y3_train = y3_train.collect()
-    # y3_test = y3_test.collect()
+    y2_train = y2_train.collect()
+    y2_test = y2_test.collect()
+    y3_train = y3_train.collect()
+    y3_test = y3_test.collect()
     df = df.collect()
 
     activity_model = classifier(
@@ -319,31 +335,31 @@ def main(
     cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
     logger.info("Confusion Matrix:\n" + str(cm))
 
-    # # Predict speed
-    # output["score"]["speed"], speed_model = _regressor_script(
-    #     model,
-    #     "Speed",
-    #     df,
-    #     scaled_X_train,
-    #     scaled_X_test,
-    #     y2_train,
-    #     y2_test,
-    #     hyperparams,
-    #     output_dir,
-    # )
+    # Predict speed
+    output["score"]["speed_r2"], output["score"]["speed_rmse"], speed_model = _regressor_script(
+        model,
+        "Speed",
+        df,
+        scaled_X_train,
+        scaled_X_test,
+        y2_train,
+        y2_test,
+        hyperparams,
+        output_dir,
+    )
 
-    # # Predict incline
-    # output["score"]["incline"], incline_model = _regressor_script(
-    #     model,
-    #     "Incline",
-    #     df,
-    #     scaled_X_train,
-    #     scaled_X_test,
-    #     y3_train,
-    #     y3_test,
-    #     hyperparams,
-    #     output_dir,
-    # )
+    # Predict incline
+    output["score"]["incline_r2"], output["score"]["incline_rmse"], incline_model = _regressor_script(
+        model,
+        "Incline",
+        df,
+        scaled_X_train,
+        scaled_X_test,
+        y3_train,
+        y3_test,
+        hyperparams,
+        output_dir,
+    )
 
     # Save output to a JSON file
     output_json_path = output_dir / "output.json"
@@ -359,10 +375,10 @@ def main(
                 pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
         with open(output_dir / "activity.pkl", "wb") as f:
             joblib.dump((activity_model, scaled_X_train.columns), f)
-        # with open(output_dir / "speed.pkl", "wb") as f:
-        #     pickle.dump(speed_model, f, protocol=pickle.HIGHEST_PROTOCOL)
-        # with open(output_dir / "incline.pkl", "wb") as f:
-        #     pickle.dump(incline_model, f, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(output_dir / "speed.pkl", "wb") as f:
+            joblib.dump((speed_model, scaled_X_train.columns), f)
+        with open(output_dir / "incline.pkl", "wb") as f:
+            joblib.dump((incline_model, scaled_X_train.columns), f)
 
         logger.info("Scaler and models saved to pickle files")
 
