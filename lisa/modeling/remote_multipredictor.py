@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Literal
 
+import joblib
 import lightgbm as lgb
 import numpy as np
 import polars as pl
@@ -49,20 +50,6 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
     params = params.copy()
     params.setdefault("n_jobs", -1)
     params.setdefault("random_state", 42)
-
-    params.setdefault("bagging_fraction", 0.6)
-    params.setdefault("bagging_freq", 5)
-    params.setdefault("extra_trees", True)
-    params.setdefault("feature_fraction", 0.6)
-    params.setdefault("lambda_l1", 0.0)
-    params.setdefault("lambda_l2", 0.1)
-    params.setdefault("max_bin", 127)
-    params.setdefault("max_depth", 3)
-    params.setdefault("min_data_in_leaf", 50)
-    params.setdefault("min_gain_to_split", 0.1)
-    params.setdefault("min_sum_hessian_in_leaf", 0.1)
-    params.setdefault("num_leaves", 8)
-    params.setdefault("path_smooth", 0.3)
 
     class_weights = {"run": 1 / 0.4, "jump": 1 / 0.024, "walk": 1 / 0.576}
     sample_weight = np.array([class_weights[label] for label in y_train])
@@ -209,12 +196,12 @@ def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) 
 
 
 def main(
-    data_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
+    data_path: Path = PROCESSED_DATA_DIR / "P1.parquet",
     run_name: str = "testing",
-    model: Literal["LR", "RF", "LGBM"] = "LR",
+    model: Literal["LR", "RF", "LGBM"] = "LGBM",
     window: int = 800,
     split: float = 0.8,
-    save: bool = False,
+    save: bool = True,
 ):
     """
     Runs a multimodel predictor on the input data.
@@ -271,7 +258,23 @@ def main(
             statistic.add(stat)
             location.add(loc)
 
-    # Log the hyperparameters
+    hyperparams = {
+        "bagging_fraction": 0.6,
+        "bagging_freq": 5,
+        "extra_trees": True,
+        "feature_fraction": 0.6,
+        "lambda_l1": 0.0,
+        "lambda_l2": 0.1,
+        "max_bin": 255,
+        "max_depth": 3,
+        "min_data_in_leaf": 50,
+        "min_gain_to_split": 0.1,
+        "min_sum_hessian_in_leaf": 0.1,
+        "num_leaves": 63,
+        "path_smooth": 0.3,
+    }
+
+    # Log the parameters
     output["params"] = {
         "window": window,
         "split": split,
@@ -279,10 +282,8 @@ def main(
         "measure": list(measure),
         "location": list(location),
         "dimension": list(dimension),
-        "hyperparams": {},
+        "hyperparams": hyperparams,
     }
-
-    hyperparams = {}
 
     # Predict activity
     if not check_split_balance(y1_train, y1_test).is_empty():
@@ -357,7 +358,7 @@ def main(
             with open(output_dir / "scaler.pkl", "wb") as f:
                 pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
         with open(output_dir / "activity.pkl", "wb") as f:
-            pickle.dump(activity_model, f, protocol=pickle.HIGHEST_PROTOCOL)
+            joblib.dump((activity_model, scaled_X_train.columns), f)
         # with open(output_dir / "speed.pkl", "wb") as f:
         #     pickle.dump(speed_model, f, protocol=pickle.HIGHEST_PROTOCOL)
         # with open(output_dir / "incline.pkl", "wb") as f:
