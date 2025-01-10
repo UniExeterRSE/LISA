@@ -307,9 +307,6 @@ def main(
     y1_score = activity_model.score(scaled_X_test, y1_test)
     output["score"]["activity"] = y1_score
 
-    logger.info(f"best score: {activity_model.best_score_}")
-    logger.info(f"best params: {activity_model.best_params_}")
-
     # Calculate and log the weighted f1_score
     y1_pred = activity_model.predict(scaled_X_test)
     f1_av = metrics.f1_score(y1_test, y1_pred, average="weighted")
