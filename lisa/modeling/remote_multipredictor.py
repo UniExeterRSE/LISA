@@ -63,7 +63,7 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
         "learning_rate": [0.01, 0.1],
     }
 
-    scorer = metrics.make_scorer(metrics.f1_score, average="macro")
+    scorer = metrics.make_scorer(metrics.f1_score, average="macro", pos_label=None)
 
     models = {
         "LR": lambda **params: OneVsRestClassifier(LogisticRegression(**params).set_fit_request(sample_weight=True)),
