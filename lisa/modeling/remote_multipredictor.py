@@ -14,7 +14,7 @@ from numpy import ndarray
 from sklearn import metrics, set_config
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.multiclass import OneVsRestClassifier
 
 from lisa import evaluate
@@ -56,11 +56,19 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
 
     # LGBM tuning
     param_grid = {
-        "lambda_l1": [0.0, 0.1, 1.0, 10.0],
-        "lambda_l2": [0.0, 0.1, 1.0, 10.0],
-        "min_data_in_leaf": [10, 20, 50],
+        "max_bin": [63, 127, 255],
         "num_leaves": [15, 31, 63],
-        "learning_rate": [0.01, 0.1],
+        "min_data_in_leaf": [10, 20, 50],
+        "min_sum_hessian_in_leaf": [1e-3, 1e-2, 1e-1],
+        "bagging_fraction": [0.6, 0.8, 1.0],
+        "bagging_freq": [1, 5, 10],
+        "feature_fraction": [0.6, 0.8, 1.0],
+        "lambda_l1": [0.0, 0.1, 1.0],
+        "lambda_l2": [0.0, 0.1, 1.0],
+        "min_gain_to_split": [0.0, 0.1, 1.0],
+        "max_depth": [3, 5, 7],
+        "extra_trees": [True, False],
+        "path_smooth": [0.0, 0.1, 0.3],
     }
 
     scorer = metrics.make_scorer(metrics.f1_score, average="macro", pos_label=None)
@@ -71,16 +79,18 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
         "LGBM": lambda **params: lgb.LGBMClassifier(**params).set_fit_request(sample_weight=True),
     }
 
-    grid_search = GridSearchCV(
+    random_search = RandomizedSearchCV(
         estimator=models[model_name](**params),
-        param_grid=param_grid,
+        param_distributions=param_grid,
+        n_iter=20,
         scoring=scorer,
         cv=3,  # 3-fold cross-validation
         verbose=2,
+        random_state=42,
         n_jobs=-1,  # Use all available processors
     )
-
-    return grid_search.fit(X_train, y_train, sample_weight=sample_weight)
+    logger.info("finished tuning")
+    return random_search.fit(X_train, y_train, sample_weight=sample_weight)
 
     return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
