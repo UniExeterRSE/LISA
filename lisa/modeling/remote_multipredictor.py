@@ -14,7 +14,6 @@ from numpy import ndarray
 from sklearn import metrics, set_config
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import RandomizedSearchCV
 from sklearn.multiclass import OneVsRestClassifier
 
 from lisa import evaluate
@@ -51,46 +50,28 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
     params.setdefault("n_jobs", -1)
     params.setdefault("random_state", 42)
 
+    params.setdefault("bagging_fraction", 0.6)
+    params.setdefault("bagging_freq", 5)
+    params.setdefault("extra_trees", True)
+    params.setdefault("feature_fraction", 0.6)
+    params.setdefault("lambda_l1", 0.0)
+    params.setdefault("lambda_l2", 0.1)
+    params.setdefault("max_bin", 127)
+    params.setdefault("max_depth", 3)
+    params.setdefault("min_data_in_leaf", 50)
+    params.setdefault("min_gain_to_split", 0.1)
+    params.setdefault("min_sum_hessian_in_leaf", 0.1)
+    params.setdefault("num_leaves", 8)
+    params.setdefault("path_smooth", 0.3)
+
     class_weights = {"run": 1 / 0.4, "jump": 1 / 0.024, "walk": 1 / 0.576}
     sample_weight = np.array([class_weights[label] for label in y_train])
-
-    # LGBM tuning
-    param_grid = {
-        "max_bin": [63, 127, 255],
-        "num_leaves": [15, 31, 63],
-        "min_data_in_leaf": [10, 20, 50],
-        "min_sum_hessian_in_leaf": [1e-3, 1e-2, 1e-1],
-        "bagging_fraction": [0.6, 0.8, 1.0],
-        "bagging_freq": [1, 5, 10],
-        "feature_fraction": [0.6, 0.8, 1.0],
-        "lambda_l1": [0.0, 0.1, 1.0],
-        "lambda_l2": [0.0, 0.1, 1.0],
-        "min_gain_to_split": [0.0, 0.1, 1.0],
-        "max_depth": [3, 5, 7],
-        "extra_trees": [True, False],
-        "path_smooth": [0.0, 0.1, 0.3],
-    }
-
-    scorer = metrics.make_scorer(metrics.f1_score, average="macro", pos_label=None)
 
     models = {
         "LR": lambda **params: OneVsRestClassifier(LogisticRegression(**params).set_fit_request(sample_weight=True)),
         "RF": lambda **params: RandomForestClassifier(**params),
         "LGBM": lambda **params: lgb.LGBMClassifier(**params).set_fit_request(sample_weight=True),
     }
-
-    random_search = RandomizedSearchCV(
-        estimator=models[model_name](**params),
-        param_distributions=param_grid,
-        n_iter=20,
-        scoring=scorer,
-        cv=3,  # 3-fold cross-validation
-        verbose=2,
-        random_state=42,
-        n_jobs=-1,  # Use all available processors
-    )
-    logger.info("finished tuning")
-    return random_search.fit(X_train, y_train, sample_weight=sample_weight)
 
     return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
