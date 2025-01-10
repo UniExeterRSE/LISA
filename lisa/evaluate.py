@@ -17,7 +17,7 @@ def confusion_matrix(
     X_test: pl.DataFrame,
     y_test: pl.DataFrame,
     savepath: Path = None,
-):
+) -> pl.DataFrame:
     """
     Generate a confusion matrix for the model and save it to a file if a savepath is provided.
 
@@ -29,10 +29,13 @@ def confusion_matrix(
         savepath (Path, optional): The path to save the confusion matrix plot. Defaults to None.
 
     Returns:
-        np.ndarray: The confusion matrix.
+        pl.Dataframe: The confusion matrix.
 
     """
     cm = metrics.confusion_matrix(y_test, model.predict(X_test), labels=labels, normalize="true")
+    cm_df = pl.DataFrame(cm, schema=[str(label) for label in labels])
+    cm_df = cm_df.with_columns(pl.Series("labels", labels))
+
     if savepath:
         disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
         fig, ax = plt.subplots(figsize=(5, 5))
@@ -42,7 +45,7 @@ def confusion_matrix(
         plt.savefig(savepath)
         plt.close(fig)
 
-    return cm
+    return cm_df
 
 
 def evaluate(model, labels, X_test, y_test):
