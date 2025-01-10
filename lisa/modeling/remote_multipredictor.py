@@ -304,10 +304,8 @@ def main(
         hyperparams,
     )
 
-    # y1_score = activity_model.score(scaled_X_test, y1_test)
-    output["score"]["activity"] = activity_model.best_score_
-    output["params"]["hyperparams"] = activity_model.best_params_
-    activity_model = activity_model.best_estimator_
+    y1_score = activity_model.score(scaled_X_test, y1_test)
+    output["score"]["activity"] = y1_score
 
     logger.info(f"best score: {activity_model.best_score_}")
     logger.info(f"best params: {activity_model.best_params_}")
