@@ -43,12 +43,13 @@ def sequential_stratified_split(
 
     # Combine feature columns into a single column
     combined_feat_name = "_".join(feature_cols)
-    lf = lf.with_columns(
-        pl.concat_str(
-            [pl.col(col).fill_null("").cast(pl.Utf8) for col in feature_cols],
-            separator="_",
-        ).alias(combined_feat_name)
-    )
+    if len(feature_cols) > 1:
+        lf = lf.with_columns(
+            pl.concat_str(
+                [pl.col(col).fill_null("").cast(pl.Utf8) for col in feature_cols],
+                separator="_",
+            ).alias(combined_feat_name)
+        )
 
     # Collect unique feature combinations lazily
     unique_features = lf.select(pl.col(combined_feat_name)).unique(maintain_order=True)
@@ -81,9 +82,10 @@ def sequential_stratified_split(
 
     train_lfs, test_lfs = [], []
     for feature in unique_features.collect().to_series():
-        train_lf, test_lf = _process_feature(feature)
-        train_lfs.append(train_lf)
-        test_lfs.append(test_lf)
+        if feature is not None:
+            train_lf, test_lf = _process_feature(feature)
+            train_lfs.append(train_lf)
+            test_lfs.append(test_lf)
 
     # Combine all train and test LazyFrames
     train_lf = pl.concat(train_lfs, rechunk=True)
@@ -91,8 +93,12 @@ def sequential_stratified_split(
 
     # Generate X and y splits lazily
     splits = [
-        train_lf.select(pl.exclude(["INCLINE", "SPEED", "TRIAL", "TIME", combined_feat_name] + feature_cols)),
-        test_lf.select(pl.exclude(["INCLINE", "SPEED", "TRIAL", "TIME", combined_feat_name] + feature_cols)),
+        train_lf.select(
+            pl.exclude(["ACTIVITY", "INCLINE", "SPEED", "TRIAL", "TIME", combined_feat_name] + feature_cols)
+        ),
+        test_lf.select(
+            pl.exclude(["ACTIVITY", "INCLINE", "SPEED", "TRIAL", "TIME", combined_feat_name] + feature_cols)
+        ),
     ]
     for feature in feature_cols:
         splits.extend([train_lf.select(feature), test_lf.select(feature)])

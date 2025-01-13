@@ -31,20 +31,21 @@ def main(
     split = 0.8
 
     for w in window:
-        feature_extraction(
-            process_files(
-                input_path,
-                skip_participants,
-                missing_labels,
-                measures,
-                locations,
-                dimensions,
-            ).collect(),
-            output_path,
-            w,
-            stats,
-            False,
-        )
+        if w == 1000:
+            feature_extraction(
+                process_files(
+                    input_path,
+                    skip_participants,
+                    missing_labels,
+                    measures,
+                    locations,
+                    dimensions,
+                ).collect(),
+                output_path,
+                w,
+                stats,
+                False,
+            )
         logger.info("Completed processing")
 
         for model in tqdm(models):

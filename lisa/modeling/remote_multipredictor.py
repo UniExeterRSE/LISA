@@ -202,7 +202,7 @@ def main(
     model: Literal["LR", "RF", "LGBM"] = "LGBM",
     window: int = 800,
     split: float = 0.8,
-    save: bool = True,
+    save: bool = False,
 ):
     """
     Runs a multimodel predictor on the input data.
@@ -241,6 +241,7 @@ def main(
     # Prepare data
     df = input_df
     X_train, X_test, y3_train, y3_test = sequential_stratified_split(df, split, window, ["INCLINE"])
+
     if model == "LR":
         logger.info("scaling data...")
         scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
