@@ -17,7 +17,6 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 
-from lisa import evaluate
 from lisa.config import FOOT_SENSOR_PATTERN, IMU_PATTERN, MODELS_DIR, PROCESSED_DATA_DIR
 from lisa.features import (
     check_split_balance,
@@ -241,9 +240,7 @@ def main(
 
     # Prepare data
     df = input_df
-    X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
-        df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
-    )
+    X_train, X_test, y3_train, y3_test = sequential_stratified_split(df, split, window, ["INCLINE"])
     if model == "LR":
         logger.info("scaling data...")
         scaled_X_train, scaled_X_test, scaler = standard_scaler(X_train, X_test)
@@ -302,51 +299,51 @@ def main(
     }
 
     # Predict activity
-    if not check_split_balance(y1_train, y1_test).is_empty():
-        logger.info(f"Activity unbalance: {check_split_balance(y1_train, y1_test)}")
+    # if not check_split_balance(y1_train, y1_test).is_empty():
+    #     logger.info(f"Activity unbalance: {check_split_balance(y1_train, y1_test)}")
 
     # Realise the data
-    y1_train = y1_train.collect()
-    y1_test = y1_test.collect()
-    y2_train = y2_train.collect()
-    y2_test = y2_test.collect()
+    # y1_train = y1_train.collect()
+    # y1_test = y1_test.collect()
+    # y2_train = y2_train.collect()
+    # y2_test = y2_test.collect()
     y3_train = y3_train.collect()
     y3_test = y3_test.collect()
     df = df.collect()
 
-    activity_model = classifier(
-        model,
-        scaled_X_train,
-        y1_train.to_numpy().ravel(),
-        hyperparams,
-    )
+    # activity_model = classifier(
+    #     model,
+    #     scaled_X_train,
+    #     y1_train.to_numpy().ravel(),
+    #     hyperparams,
+    # )
 
-    y1_score = activity_model.score(scaled_X_test, y1_test)
-    output["score"]["activity"] = y1_score
+    # y1_score = activity_model.score(scaled_X_test, y1_test)
+    # output["score"]["activity"] = y1_score
 
-    # Calculate and log the weighted f1_score
-    y1_pred = activity_model.predict(scaled_X_test)
-    f1_av = metrics.f1_score(y1_test, y1_pred, average="weighted")
-    output["score"]["activity_weighted"] = f1_av
+    # # Calculate and log the weighted f1_score
+    # y1_pred = activity_model.predict(scaled_X_test)
+    # f1_av = metrics.f1_score(y1_test, y1_pred, average="weighted")
+    # output["score"]["activity_weighted"] = f1_av
 
-    # Create and log confusion matrix
-    labels = df["ACTIVITY"].unique(maintain_order=True)
-    cm_plot_path = output_dir / "confusion_matrix.png"
-    cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
-    logger.info("Confusion Matrix:\n" + str(cm))
+    # # Create and log confusion matrix
+    # labels = df["ACTIVITY"].unique(maintain_order=True)
+    # cm_plot_path = output_dir / "confusion_matrix.png"
+    # cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
+    # logger.info("Confusion Matrix:\n" + str(cm))
 
-    # Predict speed
-    output["score"]["speed_r2"], output["score"]["speed_rmse"], speed_model = _regressor_script(
-        model,
-        "Speed",
-        df,
-        scaled_X_train,
-        scaled_X_test,
-        y2_train,
-        y2_test,
-        hyperparams,
-        output_dir,
-    )
+    # # Predict speed
+    # output["score"]["speed_r2"], output["score"]["speed_rmse"], speed_model = _regressor_script(
+    #     model,
+    #     "Speed",
+    #     df,
+    #     scaled_X_train,
+    #     scaled_X_test,
+    #     y2_train,
+    #     y2_test,
+    #     hyperparams,
+    #     output_dir,
+    # )
 
     # Predict incline
     output["score"]["incline_r2"], output["score"]["incline_rmse"], incline_model = _regressor_script(
@@ -373,10 +370,10 @@ def main(
         if scaler is not None:
             with open(output_dir / "scaler.pkl", "wb") as f:
                 pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
-        with open(output_dir / "activity.pkl", "wb") as f:
-            joblib.dump((activity_model, scaled_X_train.columns), f)
-        with open(output_dir / "speed.pkl", "wb") as f:
-            joblib.dump((speed_model, scaled_X_train.columns), f)
+        # with open(output_dir / "activity.pkl", "wb") as f:
+        #     joblib.dump((activity_model, scaled_X_train.columns), f)
+        # with open(output_dir / "speed.pkl", "wb") as f:
+        #     joblib.dump((speed_model, scaled_X_train.columns), f)
         with open(output_dir / "incline.pkl", "wb") as f:
             joblib.dump((incline_model, scaled_X_train.columns), f)
 
