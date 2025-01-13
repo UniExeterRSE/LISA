@@ -13,8 +13,8 @@ def main(
     input_path: Path = MAIN_DATA_DIR,
     output_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
     models: list[str] = ["LGBM"],
-    run_id: str = "incline_tuned",
-    measures=["global angle", "mag", "gyro", "accel"],
+    run_id: str = "incline_highg",
+    measures=["global angle", "mag", "gyro", "accel", "highg"],
     locations=["pelvis", "thigh", "shank", "foot_", "foot sensor"],
     dimensions=["z"],
     stats=["min", "max", "mean"],
@@ -27,32 +27,30 @@ def main(
     # skip_participants = list(range(1, 15))
     skip_participants = [15, 16]
 
-    window = [800, 1000]
+    window = 1000
     split = 0.8
 
-    for w in window:
-        if w == 1000:
-            feature_extraction(
-                process_files(
-                    input_path,
-                    skip_participants,
-                    missing_labels,
-                    measures,
-                    locations,
-                    dimensions,
-                ).collect(),
-                output_path,
-                w,
-                stats,
-                False,
-            )
-        logger.info("Completed processing")
+    feature_extraction(
+        process_files(
+            input_path,
+            skip_participants,
+            missing_labels,
+            measures,
+            locations,
+            dimensions,
+        ).collect(),
+        output_path,
+        window,
+        stats,
+        False,
+    )
+    logger.info("Completed processing")
 
-        for model in tqdm(models):
-            run_name = model + "_" + run_id
-            multipredictor_main(output_path, run_name, model, w, split, True)
+    for model in tqdm(models):
+        run_name = model + "_" + run_id
+        multipredictor_main(output_path, run_name, model, window, split, True)
 
-        logger.success("Completed training")
+    logger.success("Completed training")
 
 
 if __name__ == "__main__":
