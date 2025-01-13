@@ -79,7 +79,7 @@ def regressor(
         X_train (pl.DataFrame): The training data.
         X_test (pl.DataFrame): The test data.
         y_train (pl.DataFrame): The training labels.
-        y_test (pl.DataFramey): The test labels.
+        y_test (pl.DataFrame): The test labels.
         params (dict[str, any]): The hyperparameters for the model.
 
     Returns:
@@ -329,7 +329,7 @@ def main(
     output["score"]["activity_weighted"] = f1_av
 
     # Create and log confusion matrix
-    labels = df.select("ACTIVITY").collect().unique(maintain_order=True)
+    labels = df.select("ACTIVITY").collect().to_series().unique(maintain_order=True)
     cm_plot_path = output_dir / "confusion_matrix.png"
     cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
     logger.info("Confusion Matrix:\n" + str(cm))

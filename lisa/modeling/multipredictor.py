@@ -310,7 +310,7 @@ def main(
             mlflow.log_metric("f1_score_weighted", f1_av)
 
             # Create and log confusion matrix
-            labels = df.select("ACTIVITY").collect().unique(maintain_order=True)
+            labels = df.select("ACTIVITY").collect().to_series().unique(maintain_order=True)
             cm_plot_path = ARTIFACTS_DIR / f"{model}_confusion_matrix.png"
             cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
             logger.info("Confusion Matrix:\n" + str(cm))
