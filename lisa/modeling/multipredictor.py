@@ -10,6 +10,7 @@ import numpy as np
 import polars as pl
 from loguru import logger
 from numpy import ndarray
+from sklearn import metrics
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
@@ -57,30 +58,35 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
         "LGBM": lambda **params: lgb.LGBMClassifier(**params),
     }
 
-    return models[model_name](**params).fit(X_train, y_train)
+    # Testing weighting for LGBM
+    class_weights = {"run": 1 / 0.4, "jump": 1 / 0.024, "walk": 1 / 0.576}
+
+    sample_weight = np.array([class_weights[label] for label in y_train])
+
+    return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
 
 def regressor(
     model_name: str,
-    X_train: ndarray,
-    X_test: ndarray,
-    y_train: ndarray,
-    y_test: ndarray,
+    X_train: pl.DataFrame,
+    X_test: pl.DataFrame,
+    y_train: pl.DataFrame,
+    y_test: pl.DataFrame,
     params: dict[str, any],
-) -> tuple[ndarray, float, RegressorModel]:
+) -> tuple[pl.DataFrame, ndarray, RegressorModel]:
     """
     Fits a regressor model to the input data.
     Filters out the rows with null values (non-locomotion activities) before fitting.
 
     Args:
-        X_train (ndarray): The training data.
-        X_test (ndarray): The test data.
-        y_train (ndarray): The training labels.
-        y_test (ndarray): The test labels.
+        X_train (pl.DataFrame): The training data.
+        X_test (pl.DataFrame): The test data.
+        y_train (pl.DataFrame): The training labels.
+        y_test (pl.DataFrame): The test labels.
         params (dict[str, any]): The hyperparameters for the model.
 
     Returns:
-        tuple[ndarray, float, RegressorModel]: The predicted value, model score and model.
+        tuple[pl.DataFrame, ndarray, RegressorModel]: The true values, predicted values, and model.
     """
 
     params = params.copy()
@@ -92,6 +98,7 @@ def regressor(
         params.setdefault("max_depth", 10)
 
     params.setdefault("n_jobs", -1)
+    params.setdefault("class_weight", "balanced")
 
     models = {
         "LR": lambda **params: LinearRegression(**params),
@@ -105,28 +112,29 @@ def regressor(
     X_train_filtered = X_train.filter(train_non_null_mask)
     y_train_filtered = y_train.filter(train_non_null_mask)
 
-    model.fit(X_train_filtered, y_train_filtered.to_numpy().ravel())
+    model.fit(
+        X_train_filtered,
+        y_train_filtered.to_numpy().ravel(),
+    )
 
     test_non_null_mask = y_test.to_series(0).is_not_null()
     X_test_filtered = X_test.filter(test_non_null_mask)
     y_test_filtered = y_test.filter(test_non_null_mask)
+
     y_pred = model.predict(X_test_filtered)
 
-    y_score = model.score(X_test_filtered, y_test_filtered)
-
-    return y_pred, y_score, model
+    return y_test_filtered, y_pred, model
 
 
 def _regressor_script(
     model_name: str,
     feature_name: str,
-    df: pl.DataFrame,
-    X_train: ndarray,
-    X_test: ndarray,
-    y_train: ndarray,
-    y_test: ndarray,
+    X_train: pl.DataFrame,
+    X_test: pl.DataFrame,
+    y_train: pl.DataFrame,
+    y_test: pl.DataFrame,
     hyperparams: dict[str, any],
-) -> tuple[float, Path, Path]:
+) -> tuple[float, float, RegressorModel, Path, Path | None]:
     """
     Script set-up and tear-down for fitting the regressor model.
     Logs any imbalance in train-test split, fits the model, and saves the histogram plot
@@ -134,24 +142,29 @@ def _regressor_script(
 
     Args:
         feature_name (str): The name of the feature to predict, i.e 'Speed'.
-        df (pl.DataFrame): The full DataFrame.
-        X_train (ndarray): The training data.
-        X_test (ndarray): The test data.
-        y_train (ndarray): The training labels.
-        y_test (ndarray): The test labels.
+        X_train (pl.DataFrame): The training data.
+        X_test (pl.DataFrame): The test data.
+        y_train (pl.DataFrame): The training labels.
+        y_test (pl.DataFrame): The test labels.
         hyperparams (dict[str, any]): The hyperparameters for the model.
 
     Returns:
-        tuple[float, Path, Path | None]: The model score, path to the histogram plot,
-        and path to the feature importances if it exists.
+        float: The r2 score.
+        float: The rmse score.
+        RegressorModel: The trained regressor model.
+        Path: Path to the histogram plot.
+        Path | None: Path to the feature importances if it exists.
     """
     if not check_split_balance(y_train.lazy(), y_test.lazy()).is_empty():
         logger.info(f"{feature_name} unbalance: {check_split_balance(y_train.lazy(), y_test.lazy())}")
 
-    y_pred, y_score, model = regressor(model_name, X_train, X_test, y_train, y_test, hyperparams)
+    y_test_filtered, y_pred, model = regressor(model_name, X_train, X_test, y_train, y_test, hyperparams)
+
+    rmse = np.sqrt(metrics.mean_squared_error(y_test_filtered, y_pred))
+    r2 = metrics.r2_score(y_test_filtered, y_pred)
 
     y_plot_path = ARTIFACTS_DIR / f"{model_name}_{feature_name}_hist.png"
-    hist = regression_histogram(df, y_pred, feature_name.upper())
+    hist = regression_histogram(y_test_filtered, y_pred, feature_name.upper())
 
     hist.savefig(y_plot_path)
 
@@ -163,7 +176,7 @@ def _regressor_script(
         with open(feature_importances_path, "w") as f:
             json.dump(sorted_feature_importance_dict, f, indent=4)
 
-    return y_score, y_plot_path, feature_importances_path
+    return r2, rmse, model, y_plot_path, feature_importances_path
 
 
 def _feature_importances(model: TreeBasedRegressorModel, X_train: pl.DataFrame) -> dict[str, float]:
@@ -278,7 +291,6 @@ def main(
             y2_test = y2_test.collect()
             y3_train = y3_train.collect()
             y3_test = y3_test.collect()
-            df = df.collect()
 
             activity_model = classifier(
                 model,
@@ -290,8 +302,15 @@ def main(
             y1_score = activity_model.score(scaled_X_test, y1_test)
             mlflow.log_metric("score", y1_score)
 
+            # Calculate and log the f1_score
+            y1_pred = activity_model.predict(scaled_X_test)
+            f1 = metrics.f1_score(y1_test, y1_pred, average="micro")
+            f1_av = metrics.f1_score(y1_test, y1_pred, average="weighted")
+            mlflow.log_metric("f1_score", f1)
+            mlflow.log_metric("f1_score_weighted", f1_av)
+
             # Create and log confusion matrix
-            labels = df["ACTIVITY"].unique(maintain_order=True)
+            labels = df.select("ACTIVITY").collect().unique(maintain_order=True)
             cm_plot_path = ARTIFACTS_DIR / f"{model}_confusion_matrix.png"
             cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
             logger.info("Confusion Matrix:\n" + str(cm))
@@ -299,10 +318,9 @@ def main(
 
         # Predict speed
         with mlflow.start_run(nested=True, run_name="speed regressor"):
-            y2_score, y2_plot_path, feature_importances_path = _regressor_script(
+            y2_r2, y2_rmse, y2_plot_path, feature_importances_path = _regressor_script(
                 model,
                 "Speed",
-                df,
                 scaled_X_train,
                 scaled_X_test,
                 y2_train,
@@ -310,17 +328,18 @@ def main(
                 hyperparams,
             )
 
-            mlflow.log_metric("score", y2_score)
+            mlflow.log_metric("score", y2_r2)
+            mlflow.log_metric("rmse", y2_rmse)
+            mlflow.log_metric("r2", y2_r2)
             mlflow.log_artifact(y2_plot_path)
             if feature_importances_path:
                 mlflow.log_artifact(feature_importances_path)
 
         # Predict incline
         with mlflow.start_run(nested=True, run_name="incline regressor"):
-            y3_score, y3_plot_path, feature_importances_path = _regressor_script(
+            y3_r2, y3_rmse, y3_plot_path, feature_importances_path = _regressor_script(
                 model,
                 "Incline",
-                df,
                 scaled_X_train,
                 scaled_X_test,
                 y3_train,
@@ -328,7 +347,9 @@ def main(
                 hyperparams,
             )
 
-            mlflow.log_metric("score", y3_score)
+            mlflow.log_metric("score", y3_r2)
+            mlflow.log_metric("rmse", y3_rmse)
+            mlflow.log_metric("r2", y3_r2)
             mlflow.log_artifact(y3_plot_path)
             if feature_importances_path:
                 mlflow.log_artifact(feature_importances_path)

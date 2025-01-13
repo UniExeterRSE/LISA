@@ -17,6 +17,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 
+from lisa import evaluate
 from lisa.config import FOOT_SENSOR_PATTERN, IMU_PATTERN, MODELS_DIR, PROCESSED_DATA_DIR
 from lisa.features import (
     check_split_balance,
@@ -64,25 +65,25 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
 
 def regressor(
     model_name: str,
-    X_train: ndarray,
-    X_test: ndarray,
-    y_train: ndarray,
-    y_test: ndarray,
+    X_train: pl.DataFrame,
+    X_test: pl.DataFrame,
+    y_train: pl.DataFrame,
+    y_test: pl.DataFrame,
     params: dict[str, any],
-) -> tuple[ndarray, float, float, RegressorModel]:
+) -> tuple[pl.DataFrame, ndarray, RegressorModel]:
     """
     Fits a regressor model to the input data.
     Filters out the rows with null values (non-locomotion activities) before fitting.
 
     Args:
-        X_train (ndarray): The training data.
-        X_test (ndarray): The test data.
-        y_train (ndarray): The training labels.
-        y_test (ndarray): The test labels.
+        X_train (pl.DataFrame): The training data.
+        X_test (pl.DataFrame): The test data.
+        y_train (pl.DataFrame): The training labels.
+        y_test (pl.DataFramey): The test labels.
         params (dict[str, any]): The hyperparameters for the model.
 
     Returns:
-        tuple[ndarray, float, float, RegressorModel]: The predicted value, r2 and rmse scores, and model.
+        tuple[pl.DataFrame, ndarray, RegressorModel]: The true values, predicted values, and model.
     """
 
     params = params.copy()
@@ -112,22 +113,19 @@ def regressor(
     test_non_null_mask = y_test.to_series(0).is_not_null()
     X_test_filtered = X_test.filter(test_non_null_mask)
     y_test_filtered = y_test.filter(test_non_null_mask)
+
     y_pred = model.predict(X_test_filtered)
 
-    rmse = np.sqrt(metrics.mean_squared_error(y_test_filtered, y_pred))
-    r2 = metrics.r2_score(y_test_filtered, y_pred)
-
-    return y_pred, r2, rmse, model
+    return y_test_filtered, y_pred, model
 
 
 def _regressor_script(
     model_name: str,
     feature_name: str,
-    df: pl.DataFrame,
-    X_train: ndarray,
-    X_test: ndarray,
-    y_train: ndarray,
-    y_test: ndarray,
+    X_train: pl.DataFrame,
+    X_test: pl.DataFrame,
+    y_train: pl.DataFrame,
+    y_test: pl.DataFrame,
     hyperparams: dict[str, any],
     output_dir: Path,
 ) -> tuple[float, float, RegressorModel]:
@@ -138,11 +136,10 @@ def _regressor_script(
 
     Args:
         feature_name (str): The name of the feature to predict, i.e 'Speed'.
-        df (pl.DataFrame): The full DataFrame.
-        X_train (ndarray): The training data.
-        X_test (ndarray): The test data.
-        y_train (ndarray): The training labels.
-        y_test (ndarray): The test labels.
+        X_train (pl.DataFrame): The training data.
+        X_test (pl.DataFrame): The test data.
+        y_train (pl.DataFrame): The training labels.
+        y_test (pl.DataFrame): The test labels.
         hyperparams (dict[str, any]): The hyperparameters for the model.
 
     Returns:
@@ -153,10 +150,13 @@ def _regressor_script(
     if not check_split_balance(y_train.lazy(), y_test.lazy()).is_empty():
         logger.info(f"{feature_name} unbalance: {check_split_balance(y_train.lazy(), y_test.lazy())}")
 
-    y_pred, r2, rmse, model = regressor(model_name, X_train, X_test, y_train, y_test, hyperparams)
+    y_test_filtered, y_pred, model = regressor(model_name, X_train, X_test, y_train, y_test, hyperparams)
+
+    rmse = np.sqrt(metrics.mean_squared_error(y_test_filtered, y_pred))
+    r2 = metrics.r2_score(y_test_filtered, y_pred)
 
     y_plot_path = output_dir / f"{feature_name}_hist.png"
-    hist = regression_histogram(df, y_pred, feature_name.upper())
+    hist = regression_histogram(y_test_filtered, y_pred, feature_name.upper())
 
     hist.savefig(y_plot_path)
 
@@ -240,7 +240,9 @@ def main(
 
     # Prepare data
     df = input_df
-    X_train, X_test, y3_train, y3_test = sequential_stratified_split(df, split, window, ["INCLINE"])
+    X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
+        df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
+    )
 
     if model == "LR":
         logger.info("scaling data...")
@@ -300,57 +302,54 @@ def main(
     }
 
     # Predict activity
-    # if not check_split_balance(y1_train, y1_test).is_empty():
-    #     logger.info(f"Activity unbalance: {check_split_balance(y1_train, y1_test)}")
+    if not check_split_balance(y1_train, y1_test).is_empty():
+        logger.info(f"Activity unbalance: {check_split_balance(y1_train, y1_test)}")
 
     # Realise the data
-    # y1_train = y1_train.collect()
-    # y1_test = y1_test.collect()
-    # y2_train = y2_train.collect()
-    # y2_test = y2_test.collect()
+    y1_train = y1_train.collect()
+    y1_test = y1_test.collect()
+    y2_train = y2_train.collect()
+    y2_test = y2_test.collect()
     y3_train = y3_train.collect()
     y3_test = y3_test.collect()
-    df = df.collect()
 
-    # activity_model = classifier(
-    #     model,
-    #     scaled_X_train,
-    #     y1_train.to_numpy().ravel(),
-    #     hyperparams,
-    # )
+    activity_model = classifier(
+        model,
+        scaled_X_train,
+        y1_train.to_numpy().ravel(),
+        hyperparams,
+    )
 
-    # y1_score = activity_model.score(scaled_X_test, y1_test)
-    # output["score"]["activity"] = y1_score
+    y1_score = activity_model.score(scaled_X_test, y1_test)
+    output["score"]["activity"] = y1_score
 
-    # # Calculate and log the weighted f1_score
-    # y1_pred = activity_model.predict(scaled_X_test)
-    # f1_av = metrics.f1_score(y1_test, y1_pred, average="weighted")
-    # output["score"]["activity_weighted"] = f1_av
+    # Calculate and log the weighted f1_score
+    y1_pred = activity_model.predict(scaled_X_test)
+    f1_av = metrics.f1_score(y1_test, y1_pred, average="weighted")
+    output["score"]["activity_weighted"] = f1_av
 
-    # # Create and log confusion matrix
-    # labels = df["ACTIVITY"].unique(maintain_order=True)
-    # cm_plot_path = output_dir / "confusion_matrix.png"
-    # cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
-    # logger.info("Confusion Matrix:\n" + str(cm))
+    # Create and log confusion matrix
+    labels = df.select("ACTIVITY").collect().unique(maintain_order=True)
+    cm_plot_path = output_dir / "confusion_matrix.png"
+    cm = evaluate.confusion_matrix(activity_model, labels, scaled_X_test, y1_test, cm_plot_path)
+    logger.info("Confusion Matrix:\n" + str(cm))
 
-    # # Predict speed
-    # output["score"]["speed_r2"], output["score"]["speed_rmse"], speed_model = _regressor_script(
-    #     model,
-    #     "Speed",
-    #     df,
-    #     scaled_X_train,
-    #     scaled_X_test,
-    #     y2_train,
-    #     y2_test,
-    #     hyperparams,
-    #     output_dir,
-    # )
+    # Predict speed
+    output["score"]["speed_r2"], output["score"]["speed_rmse"], speed_model = _regressor_script(
+        model,
+        "Speed",
+        scaled_X_train,
+        scaled_X_test,
+        y2_train,
+        y2_test,
+        hyperparams,
+        output_dir,
+    )
 
     # Predict incline
     output["score"]["incline_r2"], output["score"]["incline_rmse"], incline_model = _regressor_script(
         model,
         "Incline",
-        df,
         scaled_X_train,
         scaled_X_test,
         y3_train,
@@ -371,10 +370,10 @@ def main(
         if scaler is not None:
             with open(output_dir / "scaler.pkl", "wb") as f:
                 pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
-        # with open(output_dir / "activity.pkl", "wb") as f:
-        #     joblib.dump((activity_model, scaled_X_train.columns), f)
-        # with open(output_dir / "speed.pkl", "wb") as f:
-        #     joblib.dump((speed_model, scaled_X_train.columns), f)
+        with open(output_dir / "activity.pkl", "wb") as f:
+            joblib.dump((activity_model, scaled_X_train.columns), f)
+        with open(output_dir / "speed.pkl", "wb") as f:
+            joblib.dump((speed_model, scaled_X_train.columns), f)
         with open(output_dir / "incline.pkl", "wb") as f:
             joblib.dump((incline_model, scaled_X_train.columns), f)
 
