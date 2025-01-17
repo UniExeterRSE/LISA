@@ -34,7 +34,7 @@ def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: str) 
         *[(midpoints[i] + midpoints[i + 1]) / 2 for i in range(len(midpoints) - 1)],
         midpoints[-1] + (midpoints[-1] - midpoints[-2]) / 2,
     ]
-
+    bar_width = (bin_edges[3] - bin_edges[2]) * 0.2
     fig, ax = plt.subplots()
 
     ax.hist(y_pred, bins=bin_edges, alpha=0.6, label=f"Binned Predicted {y_name_label}")
@@ -44,6 +44,7 @@ def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: str) 
         color="red",
         alpha=0.6,
         label=f"Actual {y_name_label}",
+        width=bar_width,
     )
 
     # Plot the predicted data again in smaller bins, to show the distribution
