@@ -12,10 +12,11 @@ import numpy as np
 import polars as pl
 from loguru import logger
 from numpy import ndarray
+from scipy.stats import randint
 from sklearn import metrics, set_config
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.multiclass import OneVsRestClassifier
 
 from lisa import evaluate
@@ -57,10 +58,10 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
 
     # RF tuning
     param_grid_classifier = {
-        "n_estimators": [10, 20, 30],  # Number of trees
+        "n_estimators": randint(10, 50),  # Number of trees
         "max_depth": [None, 10, 20, 30],  # Tree depth
-        "min_samples_split": [2, 5, 10],  # Minimum samples to split
-        "min_samples_leaf": [1, 2, 4],  # Minimum samples per leaf
+        "min_samples_split": randint(2, 20),  # Minimum samples to split
+        "min_samples_leaf": randint(1, 10),  # Minimum samples per leaf
         "max_features": ["sqrt", "log2"],  # Features considered at each split
         "bootstrap": [True, False],  # Use bootstrap samples
     }
@@ -73,13 +74,15 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
         "LGBM": lambda **params: lgb.LGBMClassifier(**params).set_fit_request(sample_weight=True),
     }
 
-    grid_search = GridSearchCV(
+    grid_search = RandomizedSearchCV(
         estimator=models[model_name](**params),
-        param_grid=param_grid_classifier,
+        param_distributions=param_grid_classifier,
+        n_iter=50,
         scoring=scorer,
-        cv=3,  # 3-fold cross-validation
+        cv=5,
         verbose=2,
         n_jobs=-1,  # Use all available processors
+        random_state=42,
     )
 
     return grid_search.fit(X_train, y_train, sample_weight=sample_weight)
@@ -121,12 +124,12 @@ def regressor(
     params.setdefault("n_jobs", -1)
 
     param_grid_regressor = {
-        "n_estimators": [10, 20, 30],
+        "n_estimators": randint(10, 50),
         "max_depth": [None, 10, 20, 30],
-        "min_samples_split": [2, 5, 10],
-        "min_samples_leaf": [1, 2, 4],
-        "max_features": ["sqrt", "log2", None],  # None = all features
-        "bootstrap": [True, False],
+        "min_samples_split": randint(2, 20),  # Minimum samples to split
+        "min_samples_leaf": randint(1, 10),  # Minimum samples per leaf
+        "max_features": ["sqrt", "log2"],  # Features considered at each split
+        "bootstrap": [True, False],  # Use bootstrap samples
     }
 
     models = {
@@ -136,13 +139,15 @@ def regressor(
     }
     model = models[model_name](**params)
 
-    grid_search_regressor = GridSearchCV(
+    random_search_regressor = RandomizedSearchCV(
         estimator=model,
-        param_grid=param_grid_regressor,
+        param_distributions=param_grid_regressor,
+        n_iter=50,
         scoring="r2",
         cv=5,
         n_jobs=-1,
         verbose=2,
+        random_state=42,
     )
 
     # Filter out the rows with null values (non-locomotion)
@@ -150,15 +155,15 @@ def regressor(
     X_train_filtered = X_train.filter(train_non_null_mask)
     y_train_filtered = y_train.filter(train_non_null_mask)
 
-    grid_search_regressor.fit(X_train_filtered, y_train_filtered.to_numpy().ravel())
+    random_search_regressor.fit(X_train_filtered, y_train_filtered.to_numpy().ravel())
 
     test_non_null_mask = y_test.to_series(0).is_not_null()
     X_test_filtered = X_test.filter(test_non_null_mask)
     y_test_filtered = y_test.filter(test_non_null_mask)
 
-    y_pred = grid_search_regressor.predict(X_test_filtered)
+    y_pred = random_search_regressor.predict(X_test_filtered)
 
-    return y_test_filtered, y_pred, grid_search_regressor
+    return y_test_filtered, y_pred, random_search_regressor
 
 
 def _regressor_script(
