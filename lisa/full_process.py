@@ -11,7 +11,7 @@ def main(
     input_path: Path = MAIN_DATA_DIR,
     output_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
     models: list[str] = ["RF"],
-    run_id: str = "tuning",
+    run_id: str = "tuned",
     measures=["global angle", "mag", "gyro", "accel"],
     locations=["pelvis", "thigh", "shank", "foot_", "foot sensor"],
     dimensions=["z"],

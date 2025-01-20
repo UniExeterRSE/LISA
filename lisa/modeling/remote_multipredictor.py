@@ -12,11 +12,9 @@ import numpy as np
 import polars as pl
 from loguru import logger
 from numpy import ndarray
-from scipy.stats import randint
 from sklearn import metrics, set_config
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import RandomizedSearchCV
 from sklearn.multiclass import OneVsRestClassifier
 
 from lisa import evaluate
@@ -56,36 +54,11 @@ def classifier(model_name: str, X_train: ndarray, y_train: ndarray, params: dict
     class_weights = {"run": 1 / 0.4, "jump": 1 / 0.024, "walk": 1 / 0.576}
     sample_weight = np.array([class_weights[label] for label in y_train])
 
-    # RF tuning
-    param_grid_classifier = {
-        "n_estimators": randint(10, 50),  # Number of trees
-        "max_depth": [None, 10, 20, 30],  # Tree depth
-        "min_samples_split": randint(2, 20),  # Minimum samples to split
-        "min_samples_leaf": randint(1, 10),  # Minimum samples per leaf
-        "max_features": ["sqrt", "log2"],  # Features considered at each split
-        "bootstrap": [True, False],  # Use bootstrap samples
-    }
-
-    scorer = metrics.make_scorer(metrics.f1_score, average="macro", pos_label=None)
-
     models = {
         "LR": lambda **params: OneVsRestClassifier(LogisticRegression(**params).set_fit_request(sample_weight=True)),
         "RF": lambda **params: RandomForestClassifier(**params).set_fit_request(sample_weight=True),
         "LGBM": lambda **params: lgb.LGBMClassifier(**params).set_fit_request(sample_weight=True),
     }
-
-    grid_search = RandomizedSearchCV(
-        estimator=models[model_name](**params),
-        param_distributions=param_grid_classifier,
-        n_iter=50,
-        scoring=scorer,
-        cv=5,
-        verbose=2,
-        n_jobs=-1,  # Use all available processors
-        random_state=42,
-    )
-
-    return grid_search.fit(X_train, y_train, sample_weight=sample_weight)
 
     return models[model_name](**params).fit(X_train, y_train, sample_weight=sample_weight)
 
@@ -116,21 +89,7 @@ def regressor(
     params = params.copy()
     if model_name != "LR":
         params.setdefault("random_state", 42)
-
-    if model_name == "RF":
-        params.setdefault("n_estimators", 10)
-        params.setdefault("max_depth", 10)
-
     params.setdefault("n_jobs", -1)
-
-    param_grid_regressor = {
-        "n_estimators": randint(10, 50),
-        "max_depth": [None, 10, 20, 30],
-        "min_samples_split": randint(2, 20),  # Minimum samples to split
-        "min_samples_leaf": randint(1, 10),  # Minimum samples per leaf
-        "max_features": ["sqrt", "log2"],  # Features considered at each split
-        "bootstrap": [True, False],  # Use bootstrap samples
-    }
 
     models = {
         "LR": lambda **params: LinearRegression(**params),
@@ -139,31 +98,20 @@ def regressor(
     }
     model = models[model_name](**params)
 
-    random_search_regressor = RandomizedSearchCV(
-        estimator=model,
-        param_distributions=param_grid_regressor,
-        n_iter=50,
-        scoring="r2",
-        cv=5,
-        n_jobs=-1,
-        verbose=2,
-        random_state=42,
-    )
-
     # Filter out the rows with null values (non-locomotion)
     train_non_null_mask = y_train.to_series(0).is_not_null()
     X_train_filtered = X_train.filter(train_non_null_mask)
     y_train_filtered = y_train.filter(train_non_null_mask)
 
-    random_search_regressor.fit(X_train_filtered, y_train_filtered.to_numpy().ravel())
+    model.fit(X_train_filtered, y_train_filtered.to_numpy().ravel())
 
     test_non_null_mask = y_test.to_series(0).is_not_null()
     X_test_filtered = X_test.filter(test_non_null_mask)
     y_test_filtered = y_test.filter(test_non_null_mask)
 
-    y_pred = random_search_regressor.predict(X_test_filtered)
+    y_pred = model.predict(X_test_filtered)
 
-    return y_test_filtered, y_pred, random_search_regressor
+    return y_test_filtered, y_pred, model
 
 
 def _regressor_script(
@@ -335,6 +283,15 @@ def main(
             "min_sum_hessian_in_leaf": 0.1,
             "num_leaves": 63,
             "path_smooth": 0.3,
+        }
+    elif model == "RF":
+        hyperparams = {
+            "max_depth": 30,
+            "max_features": "sqrt",
+            "min_samples_leaf": 8,
+            "min_samples_split": 8,
+            "n_estimators": 28,
+            "bootstrap": True,
         }
 
     # Log the parameters
