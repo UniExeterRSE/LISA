@@ -56,6 +56,14 @@ def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: str) 
         label=f"Predicted {y_name_label} Distribution",
     )
 
+    # Set axes limits
+    if y_name == "SPEED":
+        ax.set_xlim(0.5, 3.5)
+        ax.set_ylim(0, 1.4)
+    elif y_name == "INCLINE":
+        ax.set_xlim(-20, 20)
+        ax.set_ylim(0, 2.25)
+
     ax.set_xlabel(y_name_label)
     ax.set_ylabel("Frequency")
     ax.legend()

@@ -209,7 +209,7 @@ def main(
         run_name (str): Name of the run. Default 'multimodel'.
         model (Literal["LR", "RF", "LGBM"]): Short name of the model 'family' to use.
             Currently supports 'LR' (logistic/linear regression), 'RF' (random forest), 'LGBM' (LightGBM).
-        window (int): Size of the sliding window. Default 300.
+        window (int): Size of the sliding window. Default 800.
         split (float): Train-test split. Default 0.8.
         save (bool): Whether to save the scaler and mdodels to pkl files. Default False.
     """
@@ -235,7 +235,9 @@ def main(
 
     # Prepare data
     df = input_df
-    X_train, X_test, y1_train, y1_test = sequential_stratified_split(df, split, window, ["ACTIVITY"])
+    X_train, X_test, y1_train, y1_test, y2_train, y2_test, y3_train, y3_test = sequential_stratified_split(
+        df, split, window, ["ACTIVITY", "SPEED", "INCLINE"]
+    )
 
     if model == "LR":
         logger.info("scaling data...")
@@ -266,22 +268,22 @@ def main(
             location.add(loc)
 
     hyperparams = {}
-    # if model == "LGBM":
-    # hyperparams = {
-    #     "bagging_fraction": 0.6,
-    #     "bagging_freq": 5,
-    #     "extra_trees": True,
-    #     "feature_fraction": 0.6,
-    #     "lambda_l1": 0.0,
-    #     "lambda_l2": 0.1,
-    #     "max_bin": 255,
-    #     "max_depth": 3,
-    #     "min_data_in_leaf": 50,
-    #     "min_gain_to_split": 0.1,
-    #     "min_sum_hessian_in_leaf": 0.1,
-    #     "num_leaves": 63,
-    #     "path_smooth": 0.3,
-    # }
+    if model == "LGBM":
+        hyperparams = {
+            "bagging_fraction": 0.6,
+            "bagging_freq": 5,
+            "extra_trees": True,
+            "feature_fraction": 0.6,
+            "lambda_l1": 0.0,
+            "lambda_l2": 0.1,
+            "max_bin": 255,
+            "max_depth": 3,
+            "min_data_in_leaf": 50,
+            "min_gain_to_split": 0.1,
+            "min_sum_hessian_in_leaf": 0.1,
+            "num_leaves": 63,
+            "path_smooth": 0.3,
+        }
     if model == "RF":
         hyperparams = {
             "max_depth": 30,
@@ -310,10 +312,10 @@ def main(
     # Realise the data
     y1_train = y1_train.collect()
     y1_test = y1_test.collect()
-    # y2_train = y2_train.collect()
-    # y2_test = y2_test.collect()
-    # y3_train = y3_train.collect()
-    # y3_test = y3_test.collect()
+    y2_train = y2_train.collect()
+    y2_test = y2_test.collect()
+    y3_train = y3_train.collect()
+    y3_test = y3_test.collect()
 
     activity_model = classifier(
         model,
@@ -337,32 +339,28 @@ def main(
     logger.info("Confusion Matrix:\n" + str(cm))
 
     # Predict speed
-    # output["score"]["speed_r2"], output["score"]["speed_rmse"], speed_model = (
-    #     _regressor_script(
-    #         model,
-    #         "Speed",
-    #         scaled_X_train,
-    #         scaled_X_test,
-    #         y2_train,
-    #         y2_test,
-    #         hyperparams,
-    #         output_dir,
-    #     )
-    # )
+    output["score"]["speed_r2"], output["score"]["speed_rmse"], speed_model = _regressor_script(
+        model,
+        "Speed",
+        scaled_X_train,
+        scaled_X_test,
+        y2_train,
+        y2_test,
+        hyperparams,
+        output_dir,
+    )
 
-    # # Predict incline
-    # output["score"]["incline_r2"], output["score"]["incline_rmse"], incline_model = (
-    #     _regressor_script(
-    #         model,
-    #         "Incline",
-    #         scaled_X_train,
-    #         scaled_X_test,
-    #         y3_train,
-    #         y3_test,
-    #         hyperparams,
-    #         output_dir,
-    #     )
-    # )
+    # Predict incline
+    output["score"]["incline_r2"], output["score"]["incline_rmse"], incline_model = _regressor_script(
+        model,
+        "Incline",
+        scaled_X_train,
+        scaled_X_test,
+        y3_train,
+        y3_test,
+        hyperparams,
+        output_dir,
+    )
 
     # Save output to a JSON file
     output_json_path = output_dir / "output.json"
@@ -378,10 +376,10 @@ def main(
                 pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
         with open(output_dir / "activity.pkl", "wb") as f:
             joblib.dump((activity_model, scaled_X_train.columns), f)
-        # with open(output_dir / "speed.pkl", "wb") as f:
-        #     joblib.dump((speed_model, scaled_X_train.columns), f)
-        # with open(output_dir / "incline.pkl", "wb") as f:
-        #     joblib.dump((incline_model, scaled_X_train.columns), f)
+        with open(output_dir / "speed.pkl", "wb") as f:
+            joblib.dump((speed_model, scaled_X_train.columns), f)
+        with open(output_dir / "incline.pkl", "wb") as f:
+            joblib.dump((incline_model, scaled_X_train.columns), f)
 
         logger.info("Scaler and models saved to pickle files")
 
