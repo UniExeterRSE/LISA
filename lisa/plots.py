@@ -1,3 +1,5 @@
+from typing import Literal
+
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
@@ -7,7 +9,7 @@ app = typer.Typer()
 
 
 @app.command()
-def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: str) -> plt.Figure:
+def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: Literal["SPEED", "INCLINE"]) -> plt.Figure:
     """
     Plot a histogram of the predicted values versus the true values after regression.
     Predicted values are displayed twice; once binned to match the true values, and once in a finer distribution.
@@ -15,7 +17,7 @@ def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: str) 
     Args:
         y_true (pl.DataFrame): The true values.
         y_pred (np.ndarray): The predicted values.
-        y_name (str): The name of the target column.
+        y_name (Literal["SPEED", "INCLINE"]): The name of the target column.
 
     Returns:
         fig: The matplotlib figure object.
@@ -56,17 +58,18 @@ def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: str) 
         label=f"Predicted {y_name_label} Distribution",
     )
 
-    # Set axes limits
+    # Set axes
     if y_name == "SPEED":
         ax.set_xlim(0.5, 3.5)
         ax.set_ylim(0, 1.4e6)
+        ax.set_xlabel("Speed (m/s)")
     elif y_name == "INCLINE":
         ax.set_xlim(-20, 20)
         ax.set_ylim(0, 2.2e6)
+        ax.set_xlabel("Incline (°)")
 
-    ax.set_xlabel(y_name_label)
-    ax.set_ylabel("Frequency")
-    ax.legend()
+    ax.set_ylabel("Count")
+    # ax.legend()
 
     return fig
 

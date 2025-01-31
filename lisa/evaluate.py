@@ -37,11 +37,12 @@ def confusion_matrix(
     cm_df = cm_df.with_columns(pl.Series("labels", labels))
 
     if savepath:
-        disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+        disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels.str.to_titlecase())
         fig, ax = plt.subplots(figsize=(5, 5))
         disp.plot(ax=ax, cmap="Blues_r", values_format=".2%", colorbar=False)
-        all_sample_title = f"Score: {str(model.score(X_test, y_test))}"
-        ax.set_title(all_sample_title, size=15)
+        # all_sample_title = f"Score: {str(model.score(X_test, y_test))}"
+        # ax.set_title(all_sample_title, size=15)
+        plt.tight_layout()
         plt.savefig(savepath)
         plt.close(fig)
 
