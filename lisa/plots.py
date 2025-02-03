@@ -9,7 +9,12 @@ app = typer.Typer()
 
 
 @app.command()
-def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: Literal["SPEED", "INCLINE"]) -> plt.Figure:
+def regression_histogram(
+    y_true: pl.DataFrame,
+    y_pred: np.ndarray,
+    y_name: Literal["SPEED", "INCLINE"],
+    model_name: str,
+) -> plt.Figure:
     """
     Plot a histogram of the predicted values versus the true values after regression.
     Predicted values are displayed twice; once binned to match the true values, and once in a finer distribution.
@@ -36,6 +41,7 @@ def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: Liter
         *[(midpoints[i] + midpoints[i + 1]) / 2 for i in range(len(midpoints) - 1)],
         midpoints[-1] + (midpoints[-1] - midpoints[-2]) / 2,
     ]
+    plt.rcParams.update({"font.size": 18})
     bar_width = (bin_edges[3] - bin_edges[2]) * 0.2
     fig, ax = plt.subplots()
 
@@ -69,8 +75,8 @@ def regression_histogram(y_true: pl.DataFrame, y_pred: np.ndarray, y_name: Liter
         ax.set_xlabel("Incline (°)")
 
     ax.set_ylabel("Count")
-    # ax.legend()
 
+    plt.subplots_adjust(bottom=0.2, left=0.2)
     return fig
 
 
