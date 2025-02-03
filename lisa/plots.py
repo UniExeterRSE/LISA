@@ -13,7 +13,6 @@ def regression_histogram(
     y_true: pl.DataFrame,
     y_pred: np.ndarray,
     y_name: Literal["SPEED", "INCLINE"],
-    model_name: str,
 ) -> plt.Figure:
     """
     Plot a histogram of the predicted values versus the true values after regression.
