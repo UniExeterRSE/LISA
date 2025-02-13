@@ -29,7 +29,6 @@ def regression_histogram(
 
     if y_name not in y_true.columns:
         y_name = y_name.upper()
-    y_name_label = y_name.capitalize()
 
     counts = y_true[y_name].value_counts(sort=True)
 
@@ -40,17 +39,17 @@ def regression_histogram(
         *[(midpoints[i] + midpoints[i + 1]) / 2 for i in range(len(midpoints) - 1)],
         midpoints[-1] + (midpoints[-1] - midpoints[-2]) / 2,
     ]
-    plt.rcParams.update({"font.size": 18})
+    plt.rcParams.update({"font.size": 16})
     bar_width = (bin_edges[3] - bin_edges[2]) * 0.2
     fig, ax = plt.subplots()
 
-    ax.hist(y_pred, bins=bin_edges, alpha=0.6, label=f"Binned Predicted {y_name_label}")
+    ax.hist(y_pred, bins=bin_edges, alpha=0.6, label="Binned Predicted Value")
     ax.bar(
         counts[y_name],
         counts["count"],
         color="red",
         alpha=0.6,
-        label=f"Actual {y_name_label}",
+        label="Actual Value",
         width=bar_width,
     )
 
@@ -60,7 +59,7 @@ def regression_histogram(
         np.tile(y_pred, int(n_bins / len(bin_edges))),
         bins=n_bins,
         alpha=0.2,
-        label=f"Predicted {y_name_label} Distribution",
+        label="Predicted Value Distribution",
     )
 
     # Set axes
@@ -74,7 +73,7 @@ def regression_histogram(
         ax.set_xlabel("Incline (°)")
 
     ax.set_ylabel("Count")
-
+    plt.legend()
     plt.subplots_adjust(bottom=0.2, left=0.2)
     return fig
 

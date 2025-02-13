@@ -16,9 +16,9 @@ app = typer.Typer()
 
 @app.command()
 def apply_model(
-    features_path: Path = PROCESSED_DATA_DIR / "validation_p15&16.parquet",
-    feature: Literal["ACTIVITY", "SPEED", "INCLINE"] = "INCLINE",
-    model_path: Path = MODELS_DIR / "models/LGBM_tuned/incline.pkl",
+    features_path: Path = PROCESSED_DATA_DIR / "validation_p15&16_with_y.parquet",
+    feature: Literal["ACTIVITY", "SPEED", "INCLINE"] = "ACTIVITY",
+    model_path: Path = MODELS_DIR / "models/LGBM_activity_only_v2/activity.pkl",
     scaler_path: Path | None = None,
 ):
     """
@@ -27,7 +27,6 @@ def apply_model(
     # Load the model and scaler
     logger.info(f"Loading model from {model_path}")
     model, column_names = joblib.load(model_path)
-
     if scaler_path:
         logger.info(f"Loading scaler from {scaler_path}")
         scaler = joblib.load(scaler_path)
@@ -73,10 +72,10 @@ def apply_model(
         cm = evaluate.confusion_matrix(model, labels, X, y, cm_plot_path)
         logger.info("Confusion Matrix:\n" + str(cm))
 
-        results["cm_path"] = str(cm_plot_path.stem)
+        results["plot_path"] = str(cm_plot_path.stem)
         results["rmse"] = None
     else:
-        results["cm_path"] = None
+        results["plot_path"] = None
         results["rmse"] = np.sqrt(metrics.mean_squared_error(y, model.predict(X)))
 
     results_store = results_store.vstack(pl.DataFrame(results))
