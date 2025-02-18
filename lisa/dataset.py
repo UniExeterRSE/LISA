@@ -2,11 +2,68 @@ import os
 import re
 from pathlib import Path
 
+import ezc3d
 import numpy as np
 import polars as pl
 from ezc3d import c3d
 from loguru import logger
 from tqdm import tqdm
+
+
+def create_synthetic_c3d_file(save_path: Path | str) -> None:
+    """
+    Create a synthetic C3D file with randomised point and analog data.
+
+    Args:
+        file_path (Path | str): The path to save the synthetic C3D file.
+
+    Returns:
+        None
+    """
+    c3d = ezc3d.c3d()
+
+    # Set frame rate
+    frame_rate = 100
+    c3d["parameters"]["POINT"]["RATE"]["value"] = [frame_rate]
+
+    # Set example labels
+    labels = [
+        "accel_shank_l.x",
+        "accel_shank_l.y",
+        "mag_foot_r.x",
+        "mag_foot_r.y",
+        "gyro_pelvis.z",
+    ]
+
+    # Create synthetic point data
+    # NOTE We don't care about point data, but it's required to write a C3D file
+    num_frames = 1000
+    num_points = len(labels)
+    point_data = np.random.rand(3, num_points, num_frames)
+
+    # Add point data to c3d
+    c3d["data"]["points"] = point_data
+
+    # Set point labels
+    c3d["parameters"]["POINT"]["LABELS"]["value"] = labels
+
+    # Set analog rate (e.g., 10 times the frame rate)
+    analog_rate = frame_rate * 10
+    c3d["parameters"]["ANALOG"]["RATE"]["value"] = [analog_rate]
+
+    # Create synthetic analog data with the correct number of frames
+    num_channels = len(labels)
+    num_analog_frames = num_frames * (analog_rate // frame_rate)
+    analog_data = np.random.rand(num_channels, num_analog_frames)
+
+    # Add analog data to c3d
+    c3d["data"]["analogs"] = np.expand_dims(analog_data, axis=0)
+
+    # Set analog labels
+    c3d["parameters"]["ANALOG"]["LABELS"]["value"] = labels
+
+    # Save the c3d file
+    c3d.write(str(save_path))
 
 
 def _add_time_column(c: c3d, df: pl.DataFrame) -> pl.DataFrame:
