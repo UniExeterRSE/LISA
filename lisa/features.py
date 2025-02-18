@@ -4,14 +4,11 @@ from pathlib import Path
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
-import typer
 from loguru import logger
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
-from lisa.config import INTERIM_DATA_DIR, PROCESSED_DATA_DIR, PROJ_ROOT
-
-app = typer.Typer()
+from lisa.config import PROJ_ROOT
 
 
 def sequential_stratified_split(
@@ -29,8 +26,8 @@ def sequential_stratified_split(
     Args:
         lf (pl.LazyFrame): The input LazyFrame to be split.
         train_size (float): The proportion of rows to be included in the train set, between 0.0 and 1.0.
-        gap (int, optional): The number of rows to leave as a gap between the train and test sets. Defaults to 0.
-        feature_cols (list[str], optional): The list of feature columns to include in the split, to allow for multiple
+        gap (int): The number of rows to leave as a gap between the train and test sets. Defaults to 0.
+        feature_cols (list[str]): The list of feature columns to include in the split, to allow for multiple
             y features. Defaults to ['ACTIVITY'].
 
     Returns:
@@ -55,6 +52,7 @@ def sequential_stratified_split(
     unique_features = lf.select(pl.col(combined_feat_name)).unique(maintain_order=True)
 
     def _process_feature(feature: str) -> tuple[pl.LazyFrame, pl.LazyFrame]:
+        "Process a single feature"
         feature_lf = lf.filter(pl.col(combined_feat_name) == feature)
 
         # Get number of rows for the feature group
@@ -117,7 +115,7 @@ def check_split_balance(
     Args:
         y_test (pl.LazyFrame): The test set
         y_train (pl.LazyFrame): The train set
-        tolerance (float, optional): The threshold for the difference between the two proportions, between 0 and 1.
+        tolerance (float): The threshold for the difference between the two proportions, between 0 and 1.
             Defaults to 0.05.
 
     Returns:
@@ -154,7 +152,7 @@ def check_split_balance(
 
 def standard_scaler(X_train: pl.LazyFrame, X_test: pl.LazyFrame) -> tuple[pl.DataFrame, pl.DataFrame, StandardScaler]:
     """
-    Standardizes the input data.
+    Standardises the input data with scikit-learn's StandardScaler.
 
     Args:
         X_train (pl.LazyFrame): The training data to be standardised.
@@ -258,7 +256,7 @@ def feature_extraction(
         period (int): The window size in number of rows. Default is 300.
         stats (list[str]): The statistics to calculate for each signal.
             Options are ['min', 'max', 'mean', 'std', 'first', 'last']. Default is ['min', 'max', 'mean', 'std'].
-        validate_schema (bool): Whether to validate the schema of the output DataFrame.
+        validate_schema (bool): Flag to validate the schema of the output DataFrame.
             Currently only works for 'full' dataset (i.e. all features). Default is True.
     """
 
@@ -339,10 +337,9 @@ def feature_extraction(
     logger.success(f"All {len(parts)} parts processed and saved to {output_path}.")
 
 
-@app.command()
 def main(
-    input_path: Path = INTERIM_DATA_DIR / "main_data.parquet",
-    output_path: Path = PROCESSED_DATA_DIR / "main_data.parquet",
+    input_path: Path,
+    output_path: Path,
 ):
     """
     Run feature extraction on the interim data and save to file.
@@ -355,8 +352,8 @@ def main(
     """
     df = pl.read_parquet(input_path, low_memory=True, rechunk=True)
 
-    feature_extraction(df, output_path, period=300, stats=["min", "max", "mean", "std"])
+    feature_extraction(df, output_path)
 
 
 if __name__ == "__main__":
-    app()
+    main()

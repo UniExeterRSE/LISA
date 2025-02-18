@@ -61,6 +61,10 @@ def test_process_c3d() -> None:
 
 
 def test_process_c3d_filter_columns() -> None:
+    """
+    Test that process_c3d removes unwanted channels
+    """
+
     # Create a mock c3d object
     c3d_contents = c3d()
     c3d_contents["data"]["analogs"] = np.array(
@@ -116,7 +120,7 @@ def test_process_c3d_filter_columns() -> None:
 
 def test_process_c3d_empty() -> None:
     """
-    Test process_c3d function with empty data
+    Test process_c3d with empty data
     """
     # Create a mock c3d object with empty data
     c3d_contents = c3d()
