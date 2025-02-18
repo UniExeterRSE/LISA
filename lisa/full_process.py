@@ -11,9 +11,9 @@ from lisa.modeling.remote_multipredictor import main as multipredictor_main
 
 def main(
     input_path: Path = MAIN_DATA_DIR,
-    output_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
+    output_path: Path = PROCESSED_DATA_DIR / "no_jog.parquet",
     models: list[str] = ["LR", "RF", "LGBM"],
-    run_id: str = "plots",
+    run_id: str = "no 2_2ms",
     measures=["global angle", "mag", "gyro", "accel"],
     locations=["pelvis", "thigh", "shank", "foot_", "foot sensor"],
     dimensions=["z"],
