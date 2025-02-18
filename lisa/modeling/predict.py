@@ -55,7 +55,6 @@ def apply_model(
     logger.info("Performing predictions")
 
     RESULTS_DIR = MODELS_DIR / "validation"
-    results_store = pl.read_csv(RESULTS_DIR / "results.csv")
 
     results = {
         "val_data": [features_path.stem],
@@ -78,9 +77,16 @@ def apply_model(
         results["plot_path"] = None
         results["rmse"] = np.sqrt(metrics.mean_squared_error(y, model.predict(X)))
 
-    results_store = results_store.vstack(pl.DataFrame(results))
+    # Check if results.csv exists, if not create it
+    results_csv_path = RESULTS_DIR / "results.csv"
+    if results_csv_path.exists():
+        results_store = pl.read_csv(results_csv_path)
+        results_store = results_store.vstack(pl.DataFrame(results))
+    else:
+        logger.info(f"{results_csv_path} does not exist. Creating a new file.")
+        results_store = pl.DataFrame(results)
 
-    results_store.write_csv(RESULTS_DIR / "results.csv")
+    results_store.write_csv(results_csv_path)
     logger.success("Inference complete.")
 
 

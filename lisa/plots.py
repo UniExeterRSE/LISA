@@ -39,8 +39,8 @@ def regression_histogram(
         *[(midpoints[i] + midpoints[i + 1]) / 2 for i in range(len(midpoints) - 1)],
         midpoints[-1] + (midpoints[-1] - midpoints[-2]) / 2,
     ]
-    plt.rcParams.update({"font.size": 16})
-    bar_width = (bin_edges[3] - bin_edges[2]) * 0.2
+    # plt.rcParams.update({"font.size": 16})
+    bar_width = (bin_edges[2] - bin_edges[1]) * 0.2
     fig, ax = plt.subplots()
 
     ax.hist(y_pred, bins=bin_edges, alpha=0.6, label="Binned Predicted Value")
@@ -64,17 +64,17 @@ def regression_histogram(
 
     # Set axes
     if y_name == "SPEED":
-        ax.set_xlim(0.5, 3.5)
-        ax.set_ylim(0, 1.4e6)
+        # ax.set_xlim(0.5, 3.5)
+        # ax.set_ylim(0, 1.4e6)
         ax.set_xlabel("Speed (m/s)")
     elif y_name == "INCLINE":
-        ax.set_xlim(-20, 20)
-        ax.set_ylim(0, 2.2e6)
+        # ax.set_xlim(-20, 20)
+        # ax.set_ylim(0, 2.2e6)
         ax.set_xlabel("Incline (°)")
 
     ax.set_ylabel("Count")
     plt.legend()
-    plt.subplots_adjust(bottom=0.2, left=0.2)
+    # plt.subplots_adjust(bottom=0.2, left=0.2)
     return fig
 
 

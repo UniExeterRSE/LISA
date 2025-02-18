@@ -374,6 +374,7 @@ def main(
         if scaler is not None:
             with open(output_dir / "scaler.pkl", "wb") as f:
                 pickle.dump(scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
+                logger.info("Scaler saved to pickle file")
         with open(output_dir / "activity.pkl", "wb") as f:
             joblib.dump((activity_model, scaled_X_train.columns), f)
         with open(output_dir / "speed.pkl", "wb") as f:
@@ -381,7 +382,7 @@ def main(
         with open(output_dir / "incline.pkl", "wb") as f:
             joblib.dump((incline_model, scaled_X_train.columns), f)
 
-        logger.info("Scaler and models saved to pickle files")
+        logger.info("Models saved to pickle files")
 
     end_time = time.time()  # Record the end time
     elapsed_time = end_time - start_time  # Calculate the elapsed time

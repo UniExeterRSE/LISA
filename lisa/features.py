@@ -355,7 +355,7 @@ def main(
     """
     df = pl.read_parquet(input_path, low_memory=True, rechunk=True)
 
-    feature_extraction(df, output_path, stats=["min", "max", "mean", "std"], period=300)
+    feature_extraction(df, output_path, period=300, stats=["min", "max", "mean", "std"])
 
 
 if __name__ == "__main__":

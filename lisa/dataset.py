@@ -167,7 +167,7 @@ def process_c3d(
 
     df = df.select(filtered_columns)
 
-    # Add 'ACTIVITY', 'INCLINE', 'SPEED', 'TIME' and 'TRIAL' columns
+    ### Add 'ACTIVITY', 'INCLINE', 'SPEED', 'TIME' and 'TRIAL' columns
     df = df.with_columns(pl.lit(_find_activity_category(filename, activity_categories)).alias("ACTIVITY"))
     # relabel jog to run
     df = df.with_columns(
@@ -189,8 +189,8 @@ def process_c3d(
 
 def process_files(
     input_path: Path,
-    skip_participants: list,
-    missing_location_labels: dict,
+    skip_participants: list = [],
+    missing_location_labels: dict = {},
     measures: list[str] = ["global angle", "highg", "accel", "gyro", "mag"],
     locations: list[str] = ["foot_", "foot sensor", "shank", "thigh", "pelvis"],
     dimensions: list[str] = ["x", "y", "z"],
@@ -221,7 +221,6 @@ def process_files(
 
     # Process participants in order
     participants = sorted(os.listdir(input_path), key=lambda x: int(x.split("_")[0][1:]))
-
     for participant in tqdm(participants, desc="Processing Participants"):
         participant_number = int(participant.split("_")[0][1:])
 
@@ -243,7 +242,6 @@ def process_files(
                 and any(activity in filename.lower() for activity in activity_categories)
                 and "transition" not in filename.lower()
             ):
-                # logger.info(f"Processing file: {filename}")
                 file = os.path.join(participant_path, filename)
 
                 c3d_contents = c3d(file)
