@@ -300,6 +300,7 @@ def process_files(
                 and any(activity in filename.lower() for activity in activity_categories)
                 and "transition" not in filename.lower()
                 and "1_7ms" not in filename.lower()
+                and "2_2ms" not in filename.lower()
             ):
                 file = os.path.join(participant_path, filename)
 
