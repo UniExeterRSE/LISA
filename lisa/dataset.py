@@ -247,6 +247,7 @@ def process_c3d(
 
 def process_files(
     input_path: Path,
+    speed_to_skip: str,
     skip_participants: list = [],
     missing_location_labels: dict = {},
     measures: list[str] = ["global angle", "highg", "accel", "gyro", "mag"],
@@ -299,8 +300,7 @@ def process_files(
                 filename.endswith(".c3d")
                 and any(activity in filename.lower() for activity in activity_categories)
                 and "transition" not in filename.lower()
-                and "1_7ms" not in filename.lower()
-                and "2_2ms" not in filename.lower()
+                and speed_to_skip not in filename.lower()
             ):
                 file = os.path.join(participant_path, filename)
 
