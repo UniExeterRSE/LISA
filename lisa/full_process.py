@@ -11,7 +11,7 @@ from lisa.modeling.remote_multipredictor import main as multipredictor_main
 
 def main(
     input_path: Path = MAIN_DATA_DIR,
-    output_path: Path = PROCESSED_DATA_DIR / "no_jog.parquet",
+    output_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
     models: list[str] = ["LR", "RF", "LGBM"],
     run_id: str = "",
     measures=["global angle", "mag", "gyro", "accel"],
@@ -26,33 +26,29 @@ def main(
     missing_labels = {2: "thigh_l", 6: "pelvis", 7: "pelvis", 16: "thigh_l"}
     # skip_participants = list(range(1, 15))
     skip_participants = [15, 16]
-    skip_speeds = ["1_1ms", "1_4ms", "2_5ms", "3_0ms"]
 
     window = 800
     split = 0.8
 
-    for speed in skip_speeds:
-        run_id = f"no_{speed}"
-        feature_extraction(
-            process_files(
-                input_path,
-                speed,
-                skip_participants,
-                missing_labels,
-                measures,
-                locations,
-                dimensions,
-            ).collect(),
-            output_path,
-            window,
-            stats,
-            False,
-        )
-        logger.info("Completed processing")
+    feature_extraction(
+        process_files(
+            input_path,
+            skip_participants,
+            missing_labels,
+            measures,
+            locations,
+            dimensions,
+        ).collect(),
+        output_path,
+        window,
+        stats,
+        False,
+    )
+    logger.info("Completed processing")
 
-        for model in tqdm(models):
-            run_name = model + "_" + run_id
-            multipredictor_main(output_path, run_name, model, window, split, True)
+    for model in tqdm(models):
+        run_name = model + "_" + run_id
+        multipredictor_main(output_path, run_name, model, window, split, True)
 
     logger.success("Completed training")
 
