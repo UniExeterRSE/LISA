@@ -6,7 +6,7 @@ from tqdm import tqdm
 from lisa.config import MAIN_DATA_DIR, PROCESSED_DATA_DIR
 from lisa.dataset import process_files
 from lisa.features import feature_extraction
-from lisa.modeling.remote_multipredictor import main as multipredictor_main
+from lisa.modeling.multipredictor import main as multipredictor_main
 
 
 def main(

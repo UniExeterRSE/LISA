@@ -24,12 +24,6 @@ The environment can then be created and activated:
 micromamba create -f env.yml
 micromamba activate LISA
 ```
-## MLflow
-To start the local MLflow Tracking Server, run:
-```
-mlflow server --host 127.0.0.1 --port 8080
-```
-Then navigate in your browser to http://localhost:8080/#/experiments/1
 ## Tests
 To run the tests:
 ```

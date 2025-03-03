@@ -4,7 +4,7 @@ from pathlib import Path
 from lisa.config import MODELS_DIR
 from lisa.dataset import create_synthetic_c3d_file, process_files
 from lisa.features import feature_extraction
-from lisa.modeling.remote_multipredictor import main as multipredictor_main
+from lisa.modeling.multipredictor import main as multipredictor_main
 
 
 def test_integration():
