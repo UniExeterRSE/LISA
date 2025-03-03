@@ -9,22 +9,33 @@ from loguru import logger
 from sklearn import metrics
 
 from lisa import evaluate
-from lisa.config import MODELS_DIR, PROCESSED_DATA_DIR
+from lisa.config import MODELS_DIR
 
 app = typer.Typer()
 
 
 @app.command()
 def apply_model(
-    features_path: Path = PROCESSED_DATA_DIR / "validation_p15&16_with_y.parquet",
-    feature: Literal["ACTIVITY", "SPEED", "INCLINE"] = "ACTIVITY",
-    model_path: Path = MODELS_DIR / "models/LGBM_activity_only_v2/activity.pkl",
+    features_path: Path,
+    feature: Literal["ACTIVITY", "SPEED", "INCLINE"],
+    model_path: Path,
     scaler_path: Path | None = None,
-):
+) -> None:
     """
     Load a pre-trained model and scaler from pkl files and apply them to a new dataset.
+    Evaluation plots are saved in MODELS_DIR/validation, and scores are saved in MODELS_DIR/validation/results.csv.
+
+    Args:
+        features_path (Path):The unseen processed dataset.
+        feature (Literal["ACTIVITY", "SPEED", "INCLINE"]): The feature to predict.
+        model_path (Path): Path to the pre-trained model.
+        scaler_path (Path | None): Path to the pre-trained scaler; required for linear/logistic regression.
+            Defaults to None.
+
+    Returns:
+        None
     """
-    # Load the model and scaler
+    # Load the model and scaler, if needed
     logger.info(f"Loading model from {model_path}")
     model, column_names = joblib.load(model_path)
     if scaler_path:
@@ -51,11 +62,10 @@ def apply_model(
         logger.info("Scaling the features")
         X = scaler.transform(X)
 
-    # Perform predictions
     logger.info("Performing predictions")
 
+    # Save the results
     RESULTS_DIR = MODELS_DIR / "validation"
-
     results = {
         "val_data": [features_path.stem],
         "run_id": [model_path.parent.name],
@@ -77,7 +87,6 @@ def apply_model(
         results["plot_path"] = None
         results["rmse"] = np.sqrt(metrics.mean_squared_error(y, model.predict(X)))
 
-    # Check if results.csv exists, if not create it
     results_csv_path = RESULTS_DIR / "results.csv"
     if results_csv_path.exists():
         results_store = pl.read_csv(results_csv_path)

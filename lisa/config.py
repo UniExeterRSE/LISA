@@ -39,3 +39,30 @@ try:
     logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True)
 except ModuleNotFoundError:
     pass
+
+HYPERPARAMETERS = {
+    "LR": {},
+    "RF": {
+        "max_depth": 30,
+        "max_features": "sqrt",
+        "min_samples_leaf": 8,
+        "min_samples_split": 8,
+        "n_estimators": 28,
+        "bootstrap": True,
+    },
+    "LGBM": {
+        "bagging_fraction": 0.6,
+        "bagging_freq": 5,
+        "extra_trees": True,
+        "feature_fraction": 0.6,
+        "lambda_l1": 0.0,
+        "lambda_l2": 0.1,
+        "max_bin": 255,
+        "max_depth": 3,
+        "min_data_in_leaf": 50,
+        "min_gain_to_split": 0.1,
+        "min_sum_hessian_in_leaf": 0.1,
+        "num_leaves": 63,
+        "path_smooth": 0.3,
+    },
+}
