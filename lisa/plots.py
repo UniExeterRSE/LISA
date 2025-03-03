@@ -129,10 +129,14 @@ def regression_histogram(
 
     # Set axes
     if y_name == "SPEED":
+        ax.set_xlim(0.5, 3.5)
+        ax.set_ylim(0, 1.4e6)
         ax.set_xlabel("Speed (m/s)")
     elif y_name == "INCLINE":
+        ax.set_xlim(-20, 20)
+        ax.set_ylim(0, 2.2e6)
         ax.set_xlabel("Incline (°)")
 
     ax.set_ylabel("Count")
-    plt.legend()
+    # plt.legend()
     return fig

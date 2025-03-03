@@ -43,7 +43,7 @@ except ModuleNotFoundError:
 HYPERPARAMETERS = {
     "LR": {},
     "RF": {
-        "max_depth": 30,
+        "max_depth": 20,
         "max_features": "sqrt",
         "min_samples_leaf": 8,
         "min_samples_split": 8,
