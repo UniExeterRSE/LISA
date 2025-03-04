@@ -68,8 +68,8 @@ def confusion_matrix_plot(
     disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels.str.to_titlecase())
     fig, ax = plt.subplots(figsize=(5, 5))
     disp.plot(ax=ax, cmap="Blues_r", values_format=".2%", colorbar=False)
-    all_sample_title = f"Score: {str(model.score(X_test, y_test))}"
-    ax.set_title(all_sample_title, size=15)
+    # all_sample_title = f"Score: {str(model.score(X_test, y_test))}"
+    # ax.set_title(all_sample_title, size=15)
     plt.tight_layout()
 
     return fig
@@ -129,8 +129,7 @@ def regression_histogram(
 
     # Set axes
     if y_name == "SPEED":
-        ax.set_xlim(0.5, 3.5)
-        ax.set_ylim(0, 1.4e6)
+        ax.set_ylim(0, 1.25e6)
         ax.set_xlabel("Speed (m/s)")
     elif y_name == "INCLINE":
         ax.set_xlim(-20, 20)
@@ -139,4 +138,5 @@ def regression_histogram(
 
     ax.set_ylabel("Count")
     # plt.legend()
+    plt.subplots_adjust(bottom=0.2, left=0.2)
     return fig
