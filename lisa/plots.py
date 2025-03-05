@@ -99,6 +99,7 @@ def regression_histogram(
     counts = y_true[y_name].value_counts(sort=True)
 
     # Find the bin edges, taking the 'true' data as midpoints
+    plt.rcParams.update({"font.size": 18})
     midpoints = counts[y_name].sort()
     bin_edges = [
         midpoints[0] - (midpoints[1] - midpoints[0]) / 2,
