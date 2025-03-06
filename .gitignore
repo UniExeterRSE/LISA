@@ -1,6 +1,6 @@
 # Ignore data files, keep directories
-/data/**/*
-!/data/**/.gitkeep
+/data/**/*.*
+!/data/**/*.gitkeep
 
 # Custom
 /references/
