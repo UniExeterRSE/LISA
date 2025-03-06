@@ -29,7 +29,6 @@ def activity_weight_pie_chart(df: pl.DataFrame) -> plt.Figure:
 
     # Format plot
     labels = list(label.capitalize() for label in df_dict)
-    plt.rcParams.update({"font.size": 32})
     plt.figure(figsize=(8, 8))
     colors = sns.color_palette("Set2")
 
@@ -68,8 +67,8 @@ def confusion_matrix_plot(
     disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels.str.to_titlecase())
     fig, ax = plt.subplots(figsize=(5, 5))
     disp.plot(ax=ax, cmap="Blues_r", values_format=".2%", colorbar=False)
-    # all_sample_title = f"Score: {str(model.score(X_test, y_test))}"
-    # ax.set_title(all_sample_title, size=15)
+    all_sample_title = f"Score: {str(model.score(X_test, y_test))}"
+    ax.set_title(all_sample_title, size=15)
     plt.tight_layout()
 
     return fig
@@ -99,7 +98,6 @@ def regression_histogram(
     counts = y_true[y_name].value_counts(sort=True)
 
     # Find the bin edges, taking the 'true' data as midpoints
-    plt.rcParams.update({"font.size": 18})
     midpoints = counts[y_name].sort()
     bin_edges = [
         midpoints[0] - (midpoints[1] - midpoints[0]) / 2,
@@ -130,14 +128,11 @@ def regression_histogram(
 
     # Set axes
     if y_name == "SPEED":
-        ax.set_ylim(0, 1.25e6)
         ax.set_xlabel("Speed (m/s)")
     elif y_name == "INCLINE":
-        ax.set_xlim(-20, 20)
-        ax.set_ylim(0, 2.2e6)
         ax.set_xlabel("Incline (°)")
 
     ax.set_ylabel("Count")
-    # plt.legend()
+    plt.legend()
     plt.subplots_adjust(bottom=0.2, left=0.2)
     return fig

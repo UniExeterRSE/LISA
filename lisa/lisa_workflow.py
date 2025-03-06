@@ -11,8 +11,8 @@ from lisa.modeling.multipredictor import multipredictor
 
 def main(
     input_path: Path = MAIN_DATA_DIR,
-    output_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet",
-    models: list[str] = ["RF"],
+    output_path: Path = PROCESSED_DATA_DIR / "example_file.parquet",
+    models: list[str] = ["LR", "RF", "LGBM"],
     run_id: str = "fix",
     missing_labels: dict[int, str] = {
         2: "thigh_l",
