@@ -19,7 +19,7 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.preprocessing import StandardScaler
 
 from lisa import evaluate
-from lisa.config import FOOT_SENSOR_PATTERN, HYPERPARAMETERS, IMU_PATTERN, MODELS_DIR
+from lisa.config import FOOT_SENSOR_PATTERN, IMU_PATTERN, MODELS_DIR, PROJ_ROOT
 from lisa.features import (
     check_split_balance,
     sequential_stratified_split,
@@ -341,7 +341,10 @@ def multipredictor(
         scaler = None
 
     # Get the hyperparameters for the model
-    hyperparams = HYPERPARAMETERS[model]
+    hyperparams_path = Path(PROJ_ROOT / "lisa" / "modeling" / "hyperparameters.json")
+    with hyperparams_path.open("r") as f:
+        hyperparameters = json.load(f)
+    hyperparams = hyperparameters[model]
 
     # Create output directory
     output_dir = MODELS_DIR / run_name
