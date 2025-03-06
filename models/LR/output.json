@@ -1,0 +1,39 @@
+{
+    "score": {
+        "activity": 0.7960383223538412,
+        "activity_weighted": 0.7836823613048657,
+        "speed_r2": 0.809748752814426,
+        "speed_rmse": 0.25490464426014575,
+        "incline_r2": 0.4904129516301452,
+        "incline_rmse": 5.264096464692111
+    },
+    "params": {
+        "window": 800,
+        "split": 0.8,
+        "statistic": [
+            "max",
+            "min"
+        ],
+        "measure": [
+            "accel",
+            "gyro",
+            "mag",
+            "global angle"
+        ],
+        "location": [
+            "shank_r",
+            "foot_r",
+            "thigh_l",
+            "left foot sensor",
+            "thigh_r",
+            "shank_l",
+            "right foot sensor",
+            "foot_l",
+            "pelvis"
+        ],
+        "dimension": [
+            "z"
+        ],
+        "hyperparams": {}
+    }
+}
