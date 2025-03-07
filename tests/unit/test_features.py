@@ -22,8 +22,6 @@ def sample_lazyframe():
     )
 
 
-# TODO this should ignore the warning, but doesn't
-@pytest.mark.filterwarnings("ignore:.*trials are in both train and test sets.*:UserWarning")
 def test_sequential_stratified_split(sample_lazyframe):
     """
     Test sequential_stratified_split function

@@ -2,13 +2,68 @@ import os
 import re
 from pathlib import Path
 
+import ezc3d
 import numpy as np
 import polars as pl
 from ezc3d import c3d
 from loguru import logger
 from tqdm import tqdm
 
-from lisa.config import INTERIM_DATA_DIR, MAIN_DATA_DIR
+
+def create_synthetic_c3d_file(save_path: Path | str) -> None:
+    """
+    Create a synthetic C3D file with randomised point and analog data.
+
+    Args:
+        file_path (Path | str): The path to save the synthetic C3D file.
+
+    Returns:
+        None
+    """
+    c3d = ezc3d.c3d()
+
+    # Set frame rate
+    frame_rate = 100
+    c3d["parameters"]["POINT"]["RATE"]["value"] = [frame_rate]
+
+    # Set example labels
+    labels = [
+        "accel_shank_l.x",
+        "accel_shank_l.y",
+        "mag_foot_r.x",
+        "mag_foot_r.y",
+        "gyro_pelvis.z",
+    ]
+
+    # Create synthetic point data
+    # NOTE We don't care about point data, but it's required to write a C3D file
+    num_frames = 1000
+    num_points = len(labels)
+    point_data = np.random.rand(3, num_points, num_frames)
+
+    # Add point data to c3d
+    c3d["data"]["points"] = point_data
+
+    # Set point labels
+    c3d["parameters"]["POINT"]["LABELS"]["value"] = labels
+
+    # Set analog rate (e.g., 10 times the frame rate)
+    analog_rate = frame_rate * 10
+    c3d["parameters"]["ANALOG"]["RATE"]["value"] = [analog_rate]
+
+    # Create synthetic analog data with the correct number of frames
+    num_channels = len(labels)
+    num_analog_frames = num_frames * (analog_rate // frame_rate)
+    analog_data = np.random.rand(num_channels, num_analog_frames)
+
+    # Add analog data to c3d
+    c3d["data"]["analogs"] = np.expand_dims(analog_data, axis=0)
+
+    # Set analog labels
+    c3d["parameters"]["ANALOG"]["LABELS"]["value"] = labels
+
+    # Save the c3d file
+    c3d.write(str(save_path))
 
 
 def _add_time_column(c: c3d, df: pl.DataFrame) -> pl.DataFrame:
@@ -167,8 +222,11 @@ def process_c3d(
 
     df = df.select(filtered_columns)
 
+    #################################################################
     # Add 'ACTIVITY', 'INCLINE', 'SPEED', 'TIME' and 'TRIAL' columns
+    #################################################################
     df = df.with_columns(pl.lit(_find_activity_category(filename, activity_categories)).alias("ACTIVITY"))
+
     # relabel jog to run
     df = df.with_columns(
         ACTIVITY=pl.when(pl.col("ACTIVITY") == "jog").then(pl.lit("run")).otherwise(pl.col("ACTIVITY"))
@@ -189,8 +247,8 @@ def process_c3d(
 
 def process_files(
     input_path: Path,
-    skip_participants: list,
-    missing_location_labels: dict,
+    skip_participants: list = [],
+    missing_location_labels: dict = {},
     measures: list[str] = ["global angle", "highg", "accel", "gyro", "mag"],
     locations: list[str] = ["foot_", "foot sensor", "shank", "thigh", "pelvis"],
     dimensions: list[str] = ["x", "y", "z"],
@@ -221,11 +279,10 @@ def process_files(
 
     # Process participants in order
     participants = sorted(os.listdir(input_path), key=lambda x: int(x.split("_")[0][1:]))
-
     for participant in tqdm(participants, desc="Processing Participants"):
         participant_number = int(participant.split("_")[0][1:])
 
-        # Skip certain participants
+        # Skip specified participants
         if participant_number in skip_participants:
             logger.info(f"Skipping participant: {participant}")
             continue
@@ -243,7 +300,6 @@ def process_files(
                 and any(activity in filename.lower() for activity in activity_categories)
                 and "transition" not in filename.lower()
             ):
-                # logger.info(f"Processing file: {filename}")
                 file = os.path.join(participant_path, filename)
 
                 c3d_contents = c3d(file)
@@ -279,18 +335,13 @@ def process_files(
 
 
 def main(
-    input_path: Path = MAIN_DATA_DIR,
-    output_path: Path = INTERIM_DATA_DIR / "full_P1-14.parquet",
-    skip_participants: list = [15, 16],  # noqa: B008
-    missing_location_labels: dict = {
-        2: "thigh_l",
-        6: "pelvis",
-        7: "pelvis",
-        16: "thigh_l",
-    },
+    input_path: Path,
+    output_path: Path,
+    skip_participants: list,
+    missing_location_labels: dict,
 ):
     """
-    Process pilot data and save to parquet.
+    Process raw data and save to parquet.
     Combines all c3d files into one dataset.
 
     Args:

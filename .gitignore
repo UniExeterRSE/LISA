@@ -1,12 +1,9 @@
-# Data
-/data/
+# Ignore data files, keep directories
+/data/**/*.*
+!/data/**/*.gitkeep
 
 # Custom
 /references/
-
-# MLFlow
-/mlruns/
-/artifacts/
 
 # Mac OS-specific storage files
 .DS_Store

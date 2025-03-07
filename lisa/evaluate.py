@@ -9,6 +9,7 @@ from sklearn import metrics
 from sklearn.base import BaseEstimator
 
 from lisa.config import FOOT_SENSOR_PATTERN, IMU_PATTERN
+from lisa.plots import confusion_matrix_plot
 
 
 def confusion_matrix(
@@ -19,7 +20,7 @@ def confusion_matrix(
     savepath: Path = None,
 ) -> pl.DataFrame:
     """
-    Generate a confusion matrix for the model and save it to a file if a savepath is provided.
+    Generate a confusion matrix for the model and save it to a file, if a savepath is provided.
 
     Args:
         model (BaseEstimator): The trained model.
@@ -37,25 +38,11 @@ def confusion_matrix(
     cm_df = cm_df.with_columns(pl.Series("labels", labels))
 
     if savepath:
-        plt.rcParams.update({"font.size": 16})
-        disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels.str.to_titlecase())
-        fig, ax = plt.subplots(figsize=(5, 5))
-        disp.plot(ax=ax, cmap="Blues_r", values_format=".2%", colorbar=False)
-        # all_sample_title = f"Score: {str(model.score(X_test, y_test))}"
-        # ax.set_title(all_sample_title, size=15)
-        plt.tight_layout()
-        plt.savefig(savepath)
+        fig = confusion_matrix_plot(cm, model, labels, X_test, y_test)
+        fig.savefig(savepath)
         plt.close(fig)
 
     return cm_df
-
-
-def evaluate(model, labels, X_test, y_test):
-    accuracy = metrics.accuracy_score(y_test, model.predict(X_test))
-    score = model.score(X_test, y_test)
-    cm = confusion_matrix(model, labels, X_test, y_test, False)
-
-    return score, accuracy, cm
 
 
 def analyse_feature_importances(json_path: Path) -> None:
@@ -73,7 +60,7 @@ def analyse_feature_importances(json_path: Path) -> None:
     with open(json_path) as f:
         feature_importances = json.load(f)
 
-    # Initialize dictionaries to hold the aggregated scores for each component
+    # Initialise dictionaries to hold the aggregated scores for each component
     statistic_scores = defaultdict(float)
     measure_scores = defaultdict(float)
     location_scores = defaultdict(float)
