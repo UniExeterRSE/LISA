@@ -1,10 +1,14 @@
 # Low-Impact Soldier Augmentation Project
+The LISA project aims to explore using selected machine learning models to classify a range of human locomotor movements, based on data from wearable sensors. Three model types were used to classify movement type, and predict speed and inline of movement: [scikit-learn's](https://github.com/scikit-learn/scikit-learn) logistic/linear regression and random forest, and [microsoft's](https://github.com/microsoft/LightGBM) light gradient boosting machine.
 
-<a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
-    <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
-</a>
+## How to use
+Although this repository was developed for a single project, it may be helpful to others in exploring machine learning for biomechanics. The Jupyter notebook at `notebooks/example.ipynb` acts as an interactive tutorial to help guide users on the main workflow. 
 
-![Screen Recording 2024-07-18 at 14 40 42](https://github.com/user-attachments/assets/d33aebfd-4729-41cd-a2ac-e07b48cce7cc)
+`lisa/` contains scripts to transform [C3D](https://www.c3d.org/) data files into [polars](https://github.com/pola-rs/polars) Dataframes, and to extract features relevant to ML training. A framework to then train and evaluate models is also provided.
+
+To view the project output, `models/` contains the pre-trained models and outputs from `multipredictor.py` for the three model types. Each subdirectory contains the pickled model files (plus a scaler for LR) and an `output.json` file detailing the training parameters and validation scores. The RF and LGBM subdirectories also contains json files detailing the feature importances of the models. The confusion matrix and regression histograms produced are also saved.
+
+The *project overview* section below gives a more detailed map of the repository.
 
 ## Installation
 Clone the repository:
@@ -29,65 +33,64 @@ To run the tests:
 ```
 pytest
 ```
-## Data
-_Under Construction_
-
-To access the data, you will need to set `ONEDRIVE_DIR` in a `.env` file at the root level.
 
 ## Project Organisation
 
 ```
-├── LICENSE            <- Open-source license if one is chosen
-├── Makefile           <- Makefile with convenience commands like `make data` or `make train`
-├── README.md          <- The top-level README for developers using this project.
-├── data
+├── data               <- Empty directories for storing your data.
 │   ├── external       <- Data from third party sources.
 │   ├── interim        <- Intermediate data that has been transformed.
 │   ├── processed      <- The final, canonical data sets for modeling.
 │   └── raw            <- The original, immutable data dump.
 │
-├── docs               <- A default mkdocs project; see mkdocs.org for details
+├── lisa               <- Source code for use in this project.
+│   │
+│   ├── __init__.py    <- Makes lisa a Python module.
+│   │
+│   ├── config.py      <- Common filepaths and other variables used in other files.
+│   │
+│   ├── workflow.py    <- Script to run end-to-end process from raw data to trained models.
+│   │
+│   ├── dataset.py     <- Functions for processing c3d files to a Dataframe,
+│   │                     and generating synthetic data.
+│   │
+│   ├── features.py    <- Functions for extracting required features from the Dataframe.
+│   │
+│   ├── evaluate.py    <- Functions for evaluating created models.
+│   │
+│   ├── plots.py       <- Functions for producing evaluation plot.
+│   │
+│   ├── validation_schema.json   <- Record of previous dataset's column names and types, 
+│   │                               that can be used for validating new data.
+│   │
+│   └── modeling       <- Scripts to train models and then use trained models to make
+│       │                 predictions.
+│       ├── predict.py             <- Script for applying trained models to new data.
+│       ├── multipredictor.py      <- Script for training the classification and 
+│       │                             regression models in sequence.
+│       └── hyperparameters.json   <- Configuration file for setting model hyperparameters, 
+│                                     used in multipredictor.py.
 │
-├── models             <- Trained and serialized models, model predictions, or model summaries
+├── models             <- Pre-trained models and outputs for each model type.
 │
-├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-│                         the creator's initials, and a short `-` delimited description, e.g.
-│                         `1.0-jqp-initial-data-exploration`.
-│
-├── pyproject.toml     <- Project configuration file with package metadata for lisa
-│                         and configuration for tools like black
-│
-├── references         <- Data dictionaries, manuals, and all other explanatory materials.
-│
-├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-│   └── figures        <- Generated graphics and figures to be used in reporting
-│
-├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-│                         generated with `pip freeze > requirements.txt`
+├── notebooks          <- Jupyter notebooks.
+│   └── example.ipynb        <- Interactive tutorial on how to use the repository.
 │
 ├── tests              <- Test files for core functionality.
 │   │
-│   └── unit           <- Tests for individual functions
-│       ├── test_features.py
-│       └── test_dataset.py
+│   ├── unit           <- Tests for individual functions.
+│   │   ├── test_features.py
+│   │   └── test_dataset.py
+│   └── integration    <- Test for the compete workflow, i.e. raw c3d files to model outputs.
+│       └── test_workflow.py
 │
-└── lisa                <- Source code for use in this project.
-    │
-    ├── __init__.py    <- Makes lisa a Python module
-    │
-    ├── data           <- Scripts to download or generate data
-    │   └── make_dataset.py
-    │
-    ├── features       <- Scripts to turn raw data into features for modeling
-    │   └── build_features.py
-    │
-    ├── modeling         <- Scripts to train models and then use trained models to make
-    │   │                 predictions
-    │   ├── predict.py
-    │   └── logistic_regression.py
-    │
-    └── visualization  <- Scripts to create exploratory and results oriented visualizations
-        └── visualize.py
+├── .gitignore         <- Files/patterns to be ignored by git.
+├── .pre-commit-config.yaml   <- Ruff pre-commit code formatter.
+├── LICENSE            <- Currently empty.
+├── README.md          <- The top-level README for developers using this project.
+├── env.yml            <- The micromamba environment, containing the required packages.
+└── pyproject.toml     <- Project configuration file with package metadata for lisa
+                          and configuration for tools like black.
 ```
 
 --------
