@@ -8,7 +8,7 @@ Although this repository was developed for a single project, it may be helpful t
 
 To view the project output, `models/` contains the pre-trained models and outputs from `multipredictor.py` for the three model types. Each subdirectory contains the pickled model files (plus a scaler for LR) and an `output.json` file detailing the training parameters and validation scores. The RF and LGBM subdirectories also contains json files detailing the feature importances of the models. The confusion matrix and regression histograms produced are also saved.
 
-The *project overview* section below gives a more detailed map of the repository.
+The *Project Organisation* section below gives a more detailed map of the repository.
 
 ## Installation
 Clone the repository:
