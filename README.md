@@ -28,6 +28,11 @@ The environment can then be created and activated:
 micromamba create -f env.yml
 micromamba activate LISA
 ```
+
+OS-specific packages should then be installed by running:
+```
+bash post_install.sh
+```
 ## Tests
 To run the tests:
 ```
