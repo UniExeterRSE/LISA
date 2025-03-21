@@ -1,7 +1,10 @@
+import json
 import shutil
 from pathlib import Path
 
-from lisa.config import MODELS_DIR
+import pytest
+
+from lisa.config import MODELS_DIR, PROJ_ROOT
 from lisa.dataset import create_synthetic_c3d_file, process_files
 from lisa.features import feature_extraction
 from lisa.modeling.multipredictor import multipredictor
@@ -14,7 +17,7 @@ def test_integration():
         - Extract features
         - Train and test models
 
-    The test does not assert any results, but checks if the workflow runs without errors.
+    The test checks if the workflow runs without errors and if the output is as expected.
     Adapted from the example notebook.
     """
     # Create directories for test data
@@ -27,8 +30,8 @@ def test_integration():
     p2_dir.mkdir(exist_ok=True)
 
     # Create synthetic C3D files
-    create_synthetic_c3d_file(p1_dir / "P1_Walk_1_7ms_10Incline.c3d")
-    create_synthetic_c3d_file(p2_dir / "P2_Run_3_0ms_5Decline.c3d")
+    create_synthetic_c3d_file(p1_dir / "P1_Walk_1_7ms_10Incline.c3d", 42)
+    create_synthetic_c3d_file(p2_dir / "P2_Run_3_0ms_5Decline.c3d", 43)
 
     # Process the synthetic C3D files
     processed_data = process_files(data_dir)
@@ -55,6 +58,34 @@ def test_integration():
         save=False,
     )
 
+    # assert output is correct
+    with open(MODELS_DIR / run_name / "output.json") as f:
+        output = json.load(f)
+
+    expected_scores = {
+        "activity": 0.4794007490636704,
+        "activity_weighted": 0.47885165971057453,
+        "speed_r2": -0.48746998789033325,
+        "speed_rmse": 0.7927521830814496,
+        "incline_r2": -0.6304012893127671,
+        "incline_rmse": 9.576537606245962,
+    }
+
+    for key, expected_value in expected_scores.items():
+        assert pytest.approx(output["score"][key], rel=1e-6) == expected_value, f"{key} does not match"
+
+    # assert hyperparameters are correct
+    with open(PROJ_ROOT / "lisa" / "modeling" / "hyperparameters.json") as f:
+        expected_hyperparams = json.load(f)
+    assert output["params"]["hyperparams"] == expected_hyperparams["LGBM"]
+
+    # assert all other files are created
+    assert (MODELS_DIR / run_name / "confusion_matrix.png").exists()
+    assert (MODELS_DIR / run_name / "Speed_hist.png").exists()
+    assert (MODELS_DIR / run_name / "feature_importances_Speed.json").exists()
+    assert (MODELS_DIR / run_name / "Incline_hist.png").exists()
+    assert (MODELS_DIR / run_name / "feature_importances_Incline.json").exists()
+
     # Clean up created directories and files
     shutil.rmtree(data_dir)
     shutil.rmtree(processed_data_dir)
@@ -62,4 +93,6 @@ def test_integration():
 
 
 if __name__ == "__main__":
+    test_integration()
+    test_integration()
     test_integration()

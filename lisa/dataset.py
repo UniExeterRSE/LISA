@@ -10,16 +10,20 @@ from loguru import logger
 from tqdm import tqdm
 
 
-def create_synthetic_c3d_file(save_path: Path | str) -> None:
+def create_synthetic_c3d_file(save_path: Path | str, rand_seed: int | None) -> None:
     """
     Create a synthetic C3D file with randomised point and analog data.
 
     Args:
         file_path (Path | str): The path to save the synthetic C3D file.
-
+        rand_seed (int | None): The seed for random data generation. Default is None.
     Returns:
         None
     """
+    # Set the random seed for reproducibility
+    if rand_seed:
+        np.random.seed(rand_seed)
+
     c3d = ezc3d.c3d()
 
     # Set frame rate
