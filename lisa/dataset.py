@@ -10,16 +10,20 @@ from loguru import logger
 from tqdm import tqdm
 
 
-def create_synthetic_c3d_file(save_path: Path | str) -> None:
+def create_synthetic_c3d_file(save_path: Path | str, rand_seed: int | None) -> None:
     """
     Create a synthetic C3D file with randomised point and analog data.
 
     Args:
         file_path (Path | str): The path to save the synthetic C3D file.
-
+        rand_seed (int | None): The seed for random data generation. Default is None.
     Returns:
         None
     """
+    # Set the random seed for reproducibility
+    if rand_seed:
+        np.random.seed(rand_seed)
+
     c3d = ezc3d.c3d()
 
     # Set frame rate
@@ -278,6 +282,13 @@ def process_files(
     trial_count = 0
 
     # Process participants in order
+    participant_pattern = re.compile(r"^P\d{1,2}$")
+
+    participants = [participant for participant in os.listdir(input_path) if participant_pattern.match(participant)]
+
+    if not participants:
+        raise ValueError(f"No valid participant directories found in {input_path}. Expected format: 'Pxx' or 'Px'.")
+
     participants = sorted(os.listdir(input_path), key=lambda x: int(x.split("_")[0][1:]))
     for participant in tqdm(participants, desc="Processing Participants"):
         participant_number = int(participant.split("_")[0][1:])
