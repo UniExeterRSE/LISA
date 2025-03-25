@@ -1,5 +1,8 @@
 # Low-Impact Soldier Augmentation Project
-The LISA project aims to explore using selected machine learning models to classify a range of human locomotor movements, based on data from wearable sensors. Three model types were used to classify movement type, and predict speed and inline of movement: [scikit-learn's](https://github.com/scikit-learn/scikit-learn) logistic/linear regression and random forest, and [microsoft's](https://github.com/microsoft/LightGBM) light gradient boosting machine.
+The LISA project aims to explore using selected machine learning models to classify a range of human locomotor movements, based on data from wearable sensors. 
+
+Three model types were used to classify movement type, and predict speed and inline of movement: [scikit-learn's](https://github.com/scikit-learn/scikit-learn) logistic/linear regression and random forest, and [microsoft's](https://github.com/microsoft/LightGBM) light gradient boosting machine. <br>
+Initial investigations into neural network models are also available in `notebooks/neural_net.ipynb`.
 
 ## How to use
 Although this repository was developed for a single project, it may be helpful to others in exploring machine learning for biomechanics. The Jupyter notebook at `notebooks/example.ipynb` acts as an interactive tutorial to help guide users on the main workflow. 
