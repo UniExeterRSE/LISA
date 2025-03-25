@@ -28,6 +28,13 @@ The environment can then be created and activated:
 micromamba create -f env.yml
 micromamba activate LISA
 ```
+## Data Expectations
+The input data is expected in a directory in `data/raw`, containing subdirectories with name formats `Px`, where `x` is the participant number. 
+
+Each subdirectory is then expected to contain `c3d` files, with each filename containing the activity type, the speed, and the incline (optional), separated by an underscore. The expected format is '2_5ms' for 2.5 m/s speed, and '2 incline/decline' for 2% incline/decline. For example, `P1_Walk_1_7ms_10Incline.c3d` is a valid filename. Refer to `notebooks/example.ipynb` and `lisa/dataset.py` for more information.
+
+The `c3d` files themselves need to have analog data with valid dimensions (`lisa/dataset/create_synthetic_c3d_file()` can be used to show valid formats). The channel/column names are expected in the format `{measure}_{location}.{dimension}`, i.e. `accel_shank_l.x`. <br>See `lisa/validation_schema.json` for the complete schema of our processed dataset, including column names.
+
 ## Tests
 To run the tests:
 ```
