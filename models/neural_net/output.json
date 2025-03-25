@@ -1,0 +1,43 @@
+{
+    "score": {
+        "activity": 1.0,
+        "activity_weighted": null,
+        "speed_r2": null,
+        "speed_rmse": null,
+        "incline_r2": null,
+        "incline_rmse": null
+    },
+    "params": {
+        "window": 800,
+        "split": 0.8,
+        "statistic": [
+            "max",
+            "min"
+        ],
+        "measure": [
+            "global angle",
+            "accel",
+            "gyro",
+            "mag"
+        ],
+        "location": [
+            "thigh_l",
+            "foot_r",
+            "thigh_r",
+            "foot_l",
+            "shank_r",
+            "pelvis",
+            "left foot sensor",
+            "shank_l",
+            "right foot sensor"
+        ],
+        "dimension": [
+            "z"
+        ],
+        "hyperparams": {
+            "units1": 448,
+            "units2": 320,
+            "dropout": 0.5
+        }
+    }
+}
