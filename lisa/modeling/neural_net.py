@@ -14,7 +14,6 @@ from lisa.features import sequential_stratified_split, standard_scaler
 from lisa.modeling.multipredictor import _log_parameters
 
 
-# Define the model
 def create_classifier(neurons1, neurons2, dropout):
     model = keras.models.Sequential(
         [
@@ -39,6 +38,10 @@ def build_classifier(hp):
 
 
 def main(input_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet"):
+    """
+    Train a neural network classifier for activity recognition.
+    The output is saved to MODELS_DIR/neural_net.
+    """
     df = pl.scan_parquet(input_path)
 
     X_train, X_val, y_train, y_val = sequential_stratified_split(df, 0.8, 800, ["ACTIVITY"])
@@ -46,8 +49,6 @@ def main(input_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet"):
     label_encoder = LabelEncoder()
 
     X_train, X_val, scaler = standard_scaler(X_train, X_val)
-
-    X_columns = X_train.columns
 
     X_train = X_train.to_numpy()
     X_val = X_val.to_numpy()
@@ -80,8 +81,10 @@ def main(input_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet"):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    with open(output_dir / "activity.pkl", "wb") as f:
-        joblib.dump((best_model, X_columns), f)
+    best_model.save(output_dir / "activity.keras")
+
+    with open(output_dir / "scaler.pkl", "wb") as f:
+        joblib.dump(scaler, f)
 
     output = _log_parameters(df, best_hps.values, 800, 0.8)
 
