@@ -9,7 +9,7 @@ from loguru import logger
 from sklearn.preprocessing import LabelEncoder
 from tensorflow import keras
 
-from lisa.config import MODELS_DIR, PROCESSED_DATA_DIR
+from lisa.config import MODELS_DIR
 from lisa.features import sequential_stratified_split, standard_scaler
 from lisa.modeling.multipredictor import _log_parameters
 
@@ -37,7 +37,7 @@ def build_classifier(hp):
     return model
 
 
-def main(input_path: Path = PROCESSED_DATA_DIR / "reduced_main_data.parquet"):
+def main(input_path: Path):
     """
     Train a neural network classifier for activity recognition.
     The output is saved to MODELS_DIR/neural_net.

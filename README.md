@@ -81,6 +81,7 @@ pytest
 │   │
 │   └── modeling       <- Scripts to train models and then use trained models to make
 │       │                 predictions.
+│       ├── neural_net.py          <- Preliminary script for training neural net classifier.
 │       ├── predict.py             <- Script for applying trained models to new data.
 │       ├── multipredictor.py      <- Script for training the classification and 
 │       │                             regression models in sequence.
@@ -90,7 +91,8 @@ pytest
 ├── models             <- Pre-trained models and outputs for each model type.
 │
 ├── notebooks          <- Jupyter notebooks.
-│   └── example.ipynb        <- Interactive tutorial on how to use the repository.
+│   ├── example.ipynb        <- Interactive tutorial on how to use the repository.
+│   └── neural_net.ipynb     <- Record of preliminary neural network experiments.
 │
 ├── tests              <- Test files for core functionality.
 │   │
@@ -105,6 +107,7 @@ pytest
 ├── LICENSE            <- Currently empty.
 ├── README.md          <- The top-level README for developers using this project.
 ├── env.yml            <- The micromamba environment, containing the required packages.
+├── post_install.sh    <- Additional environment installation script, for OS-specific packages.
 └── pyproject.toml     <- Project configuration file with package metadata for lisa
                           and configuration for tools like black.
 ```
